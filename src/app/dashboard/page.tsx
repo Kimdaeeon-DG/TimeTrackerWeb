@@ -1,0 +1,480 @@
+"use client";
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, parseISO, differenceInHours, differenceInMinutes } from 'date-fns';
+import { ko } from 'date-fns/locale';
+import { getAllTimeEntries, updateTimeEntry, deleteTimeEntry } from '../../lib/timeEntries';
+
+interface TimeEntry {
+  id: string;
+  date: string;
+  check_in: string;
+  check_out: string | null;
+  working_hours: number | null;
+}
+
+export default function Dashboard() {
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
+  const [totalWorkingHours, setTotalWorkingHours] = useState<number>(0);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedDateEntries, setSelectedDateEntries] = useState<TimeEntry[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  // 기록 수정을 위한 상태
+  const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null);
+  const [editDate, setEditDate] = useState<string>('');
+  const [editCheckInTime, setEditCheckInTime] = useState<string>('');
+  const [editCheckOutTime, setEditCheckOutTime] = useState<string>('');
+  
+  // 환경 변수 확인
+  useEffect(() => {
+    console.log('Dashboard 페이지 로드됨');
+    console.log('Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL ? '설정됨' : '설정되지 않음');
+    console.log('Supabase Anon Key:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? '설정됨' : '설정되지 않음');
+    
+    // 환경 변수가 없으면 오류 표시
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      setError('환경 변수가 설정되지 않았습니다. .env.local 파일에 Supabase URL과 Anon Key를 설정해주세요.');
+      setIsLoading(false);
+      return;
+    }
+  }, []);
+
+  // Supabase에서 근무 기록 불러오기
+  useEffect(() => {
+    async function loadTimeEntries() {
+      try {
+        setIsLoading(true);
+        setError(null);
+        
+        const entries = await getAllTimeEntries();
+        console.log('Loaded entries:', entries);
+        setTimeEntries(entries || []);
+        
+        // 총 근무 시간 계산
+        let totalHours = 0;
+        if (entries && entries.length > 0) {
+          entries.forEach((entry) => {
+            if (entry.working_hours) {
+              totalHours += entry.working_hours;
+            }
+          });
+        }
+        setTotalWorkingHours(totalHours);
+        
+        setIsLoading(false);
+      } catch (err: any) {
+        console.error('Error loading time entries:', err);
+        setError(`근무 기록을 불러오는 중 오류가 발생했습니다: ${err.message || String(err)}`);
+        setIsLoading(false);
+      }
+    }
+    
+    // 환경 변수가 있을 때만 데이터 로드
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      loadTimeEntries();
+    }
+  }, []);
+  
+  // 이전 달로 이동
+  const prevMonth = () => {
+    setCurrentMonth(subMonths(currentMonth, 1));
+  };
+  
+  // 다음 달로 이동
+  const nextMonth = () => {
+    setCurrentMonth(addMonths(currentMonth, 1));
+  };
+  
+  // 달력 헤더 (요일)
+  const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
+  
+  // 현재 달의 모든 날짜 가져오기
+  const monthStart = startOfMonth(currentMonth);
+  const monthEnd = endOfMonth(currentMonth);
+  const monthDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
+  
+  // 달력의 첫 번째 날의 요일 (0: 일요일, 1: 월요일, ...)
+  const startDay = getDay(monthStart);
+  
+  // 날짜 선택 시 해당 날짜의 기록 표시
+  const handleDateClick = (date: string) => {
+    setSelectedDate(date);
+    const entriesForDate = timeEntries.filter(entry => entry.date === date);
+    setSelectedDateEntries(entriesForDate);
+  };
+  
+  // 근무 시간 포맷팅 함수
+  function formatWorkingHours(hours: number, compact: boolean = false): string {
+    const h = Math.floor(hours);
+    const m = Math.round((hours - h) * 60);
+    
+    if (compact) {
+      // 간결한 형식 (예: 3.5h)
+      return `${h}.${Math.floor(m / 6)}h`;
+    } else {
+      // 기존 형식 (예: 3시간 30분)
+      return `${h}시간 ${m}분`;
+    }
+  }
+  
+  // 기록 수정 시작
+  const startEditing = (entry: TimeEntry) => {
+    setEditingEntry(entry);
+    setEditDate(entry.date);
+    setEditCheckInTime(entry.check_in ? format(parseISO(entry.check_in), 'HH:mm') : '');
+    setEditCheckOutTime(entry.check_out ? format(parseISO(entry.check_out), 'HH:mm') : '');
+  };
+  
+  // 기록 수정 취소
+  const cancelEditing = () => {
+    setEditingEntry(null);
+  };
+  
+  // 기록 수정 저장
+  const saveEditedEntry = async () => {
+    if (!editingEntry) return;
+    
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      // 날짜와 시간 문자열을 Date 객체로 변환
+      const [year, month, day] = editDate.split('-').map(Number);
+      const dateObj = new Date(year, month - 1, day);
+      
+      const [checkInHours, checkInMinutes] = editCheckInTime.split(':').map(Number);
+      const checkInDate = new Date(dateObj);
+      checkInDate.setHours(checkInHours, checkInMinutes, 0);
+      
+      let checkOutDate: Date | null = null;
+      if (editCheckOutTime) {
+        const [checkOutHours, checkOutMinutes] = editCheckOutTime.split(':').map(Number);
+        checkOutDate = new Date(dateObj);
+        checkOutDate.setHours(checkOutHours, checkOutMinutes, 0);
+      }
+      
+      // 근무 시간 계산
+      let workingHoursValue = null;
+      if (checkInDate && checkOutDate) {
+        let diffMs = checkOutDate.getTime() - checkInDate.getTime();
+        
+        // 만약 차이가 음수이면 날짜가 바뀌었다고 간주
+        if (diffMs < 0) {
+          // 퇴근 시간에 24시간(86400000ms) 추가
+          const oneDayMs = 24 * 60 * 60 * 1000;
+          diffMs += oneDayMs;
+        }
+        
+        workingHoursValue = diffMs / (1000 * 60 * 60);
+      }
+      
+      // Supabase에 수정된 기록 업데이트 (날짜 포함)
+      const updatedEntry = await updateTimeEntry(
+        editingEntry.id,
+        checkInDate.toISOString(),
+        checkOutDate ? checkOutDate.toISOString() : null,
+        workingHoursValue,
+        editDate // 수정된 날짜 전달
+      );
+      
+      if (updatedEntry) {
+        setEditingEntry(null);
+        // 전체 기록 다시 불러오기
+        const entries = await getAllTimeEntries();
+        setTimeEntries(entries || []);
+        
+        // 선택한 날짜의 기록 다시 불러오기
+        if (selectedDate) {
+          const entriesForDate = entries.filter(entry => entry.date === selectedDate);
+          setSelectedDateEntries(entriesForDate);
+        }
+        
+        // 날짜가 변경되었다면 새 날짜로 선택 변경
+        if (editDate !== editingEntry.date) {
+          setSelectedDate(editDate);
+          const entriesForNewDate = entries.filter(entry => entry.date === editDate);
+          setSelectedDateEntries(entriesForNewDate);
+        }
+      }
+    } catch (err) {
+      console.error('Error updating entry:', err);
+      setError('기록 수정 중 오류가 발생했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // 기록 삭제
+  const deleteEntryHandler = async (entryId: string) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      // Supabase에서 기록 삭제
+      const success = await deleteTimeEntry(entryId);
+      
+      if (success) {
+        // 전체 기록 다시 불러오기
+        const entries = await getAllTimeEntries();
+        setTimeEntries(entries || []);
+        
+        // 선택한 날짜의 기록 다시 불러오기
+        if (selectedDate) {
+          const entriesForDate = entries.filter(entry => entry.date === selectedDate);
+          setSelectedDateEntries(entriesForDate);
+        }
+      }
+    } catch (err) {
+      console.error('Error deleting entry:', err);
+      setError('기록 삭제 중 오류가 발생했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  return (
+    <div className="container mx-auto px-4 py-8">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">근무 기록 대시보드</h1>
+        <Link 
+          href="/timer" 
+          className="bg-primary text-white px-4 py-2 rounded hover:bg-blue-700"
+        >
+          출퇴근 기록
+        </Link>
+      </div>
+      
+      {/* 로딩 상태 표시 */}
+      {isLoading && (
+        <div className="flex justify-center items-center py-10">
+          <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-500"></div>
+          <span className="ml-3">데이터를 불러오는 중...</span>
+        </div>
+      )}
+      
+      {/* 오류 상태 표시 */}
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+          <p>{error}</p>
+          <p className="text-sm mt-2">Supabase 연결 및 환경 변수를 확인해주세요.</p>
+        </div>
+      )}
+      
+      {/* 총 근무 시간 요약 */}
+      {!isLoading && !error && (
+        <div className="bg-white shadow rounded-lg p-6 mb-6">
+          <h2 className="text-xl font-semibold mb-4">근무 시간 요약</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-blue-50 p-4 rounded-lg">
+              <p className="text-gray-600">총 근무 시간</p>
+              <p className="text-2xl font-bold">{formatWorkingHours(totalWorkingHours)}</p>
+            </div>
+            <div className="bg-green-50 p-4 rounded-lg">
+              <p className="text-gray-600">이번 달 근무 일수</p>
+              <p className="text-2xl font-bold">{timeEntries.filter(entry => entry.date.startsWith(format(currentMonth, 'yyyy-MM'))).length > 0 ? Array.from(new Set(timeEntries.filter(entry => entry.date.startsWith(format(currentMonth, 'yyyy-MM'))).map(entry => entry.date))).length : 0}일</p>
+            </div>
+            <div className="bg-purple-50 p-4 rounded-lg">
+              <p className="text-gray-600">80시간 중 남은 시간</p>
+              <p className="text-2xl font-bold">
+                {totalWorkingHours < 80 
+                  ? formatWorkingHours(80 - totalWorkingHours)
+                  : '0시간 0분'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* 달력 */}
+      {!isLoading && !error && (
+        <div className="bg-white shadow rounded-lg p-6 mb-6">
+          <div className="flex justify-between items-center mb-4">
+            <button 
+              onClick={prevMonth}
+              className="p-2 rounded-full hover:bg-gray-100"
+            >
+              &lt;
+            </button>
+            <h2 className="text-xl font-semibold">
+              {format(currentMonth, 'yyyy년 MM월', { locale: ko })}
+            </h2>
+            <button 
+              onClick={nextMonth}
+              className="p-2 rounded-full hover:bg-gray-100"
+            >
+              &gt;
+            </button>
+          </div>
+        
+          <div className="grid grid-cols-7 gap-1">
+            {/* 요일 헤더 */}
+          {weekDays.map((day) => (
+            <div key={day} className="text-center font-semibold p-2">
+              {day}
+            </div>
+          ))}
+          
+          {/* 빈 칸 채우기 (월의 첫 날 이전) */}
+          {Array.from({ length: startDay }).map((_, index) => (
+            <div key={`empty-${index}`} className="p-2"></div>
+          ))}
+          
+          {/* 날짜 */}
+          {monthDays.map((day) => {
+            const dateStr = format(day, 'yyyy-MM-dd');
+            const entriesForDate = timeEntries.filter(entry => entry.date === dateStr);
+            const hasRecord = entriesForDate.length > 0;
+            const isSelected = selectedDate === dateStr;
+            
+            // 근무 시간에 따른 배경색 계산
+            let bgColorClass = '';
+            if (hasRecord) {
+              // 총 근무 시간 계산
+              const totalHours = entriesForDate.reduce((sum: number, entry: TimeEntry) => {
+                return sum + (entry.working_hours || 0);
+              }, 0);
+              
+              if (totalHours >= 8) {
+                bgColorClass = 'bg-green-100';
+              } else if (totalHours >= 4) {
+                bgColorClass = 'bg-yellow-100';
+              } else if (totalHours > 0) {
+                bgColorClass = 'bg-red-100';
+              }
+            }
+            
+            return (
+              <div 
+                key={dateStr} 
+                className={`p-2 min-h-[60px] border ${isSelected ? 'border-blue-500' : 'border-gray-200'} ${bgColorClass} cursor-pointer hover:bg-gray-50`}
+                onClick={() => handleDateClick(dateStr)}
+              >
+                <div className={`font-medium ${getDay(day) === 6 ? 'text-blue-600' : getDay(day) === 0 ? 'text-red-600' : ''}`}>
+                  {format(day, 'd')}
+                </div>
+                {hasRecord && (
+                  <div className="text-xs mt-1 text-gray-600">
+                    {formatWorkingHours(entriesForDate.reduce((sum: number, entry: TimeEntry) => sum + (entry.working_hours || 0), 0), true)}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          </div>
+        </div>
+      )}
+      
+      {/* 선택한 날짜의 출퇴근 기록 */}
+      {selectedDateEntries.length > 0 ? (
+        <div className="bg-white shadow rounded-lg p-6 mb-6">
+          <h2 className="text-xl font-semibold mb-4">
+            {selectedDate ? format(parseISO(selectedDate), 'yyyy년 MM월 dd일') : format(new Date(), 'yyyy년 MM월 dd일')} 출퇴근 기록
+          </h2>
+          <div className="overflow-hidden">
+            <div className="divide-y divide-gray-200">
+              {selectedDateEntries.map((entry) => (
+                <div key={entry.id} className="relative">
+                  {editingEntry?.id === entry.id ? (
+                    // 수정 모드
+                    <div className="p-4 bg-blue-50">
+                      <div className="mb-4">
+                        <label className="block text-xs font-medium text-gray-500 mb-1">날짜</label>
+                        <input 
+                          type="date" 
+                          value={editDate} 
+                          onChange={(e) => setEditDate(e.target.value)}
+                          className="border rounded px-2 py-1 w-full"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4 mb-4">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-500 mb-1">출근 시간</label>
+                          <input 
+                            type="time" 
+                            value={editCheckInTime} 
+                            onChange={(e) => setEditCheckInTime(e.target.value)}
+                            className="border rounded px-2 py-1 w-full"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-500 mb-1">퇴근 시간</label>
+                          <input 
+                            type="time" 
+                            value={editCheckOutTime} 
+                            onChange={(e) => setEditCheckOutTime(e.target.value)}
+                            className="border rounded px-2 py-1 w-full"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex justify-end space-x-2">
+                        <button 
+                          onClick={saveEditedEntry}
+                          className="bg-green-500 text-white px-4 py-1 rounded text-sm"
+                        >
+                          저장
+                        </button>
+                        <button 
+                          onClick={cancelEditing}
+                          className="bg-gray-500 text-white px-4 py-1 rounded text-sm"
+                        >
+                          취소
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    // 읽기 모드 - 스와이프 기능 추가
+                    <div className="group overflow-hidden">
+                      {/* 삭제 버튼 (스와이프로 노출) */}
+                      <div className="absolute right-0 top-0 bottom-0 bg-red-500 text-white flex items-center justify-center w-16 transform translate-x-full group-hover:translate-x-0 transition-transform duration-200">
+                        <button 
+                          onClick={() => deleteEntryHandler(entry.id)}
+                          className="w-full h-full flex items-center justify-center"
+                        >
+                          삭제
+                        </button>
+                      </div>
+                      
+                      {/* 기록 내용 (클릭하면 수정 모드로 전환) */}
+                      <div 
+                        className="p-4 bg-white flex justify-between items-center transform group-hover:-translate-x-16 transition-transform duration-200 cursor-pointer"
+                        onClick={() => startEditing(entry)}
+                      >
+                        <div className="flex items-center space-x-2">
+                          <div className="bg-blue-100 text-blue-800 rounded-full w-8 h-8 flex items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          </div>
+                          <div>
+                            <div className="font-medium text-sm">
+                              {entry.check_in ? format(parseISO(entry.check_in), 'HH:mm') : '-'} ~ {entry.check_out ? format(parseISO(entry.check_out), 'HH:mm') : '진행중'}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          {entry.working_hours ? formatWorkingHours(entry.working_hours, true) : '-'}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        selectedDate && (
+          <div className="bg-white shadow rounded-lg p-6 mb-6">
+            <h2 className="text-xl font-semibold mb-4">
+              {selectedDate ? format(parseISO(selectedDate), 'yyyy년 MM월 dd일') : format(new Date(), 'yyyy년 MM월 dd일')} 출퇴근 기록
+            </h2>
+            <p className="text-gray-500 text-center py-4">선택한 날짜의 출퇴근 기록이 없습니다.</p>
+          </div>
+        )
+      )}
+    </div>
+  );
+}
