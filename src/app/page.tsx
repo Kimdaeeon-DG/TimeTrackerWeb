@@ -1,36 +1,43 @@
 "use client";
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
-import { format, parseISO } from 'date-fns';
-import { getTimeEntriesByDate, createCheckInEntry, updateCheckOutEntry, updateTimeEntry, deleteTimeEntry } from '../lib/timeEntries';
+import { useRouter } from 'next/navigation';
+import { FaGithub, FaClock, FaChartBar, FaUserAlt } from 'react-icons/fa';
+import { useAuth } from '@/context/AuthContext';
+import { format } from 'date-fns';
+import { 
+  getTimeEntriesByDate, 
+  createCheckInEntry, 
+  updateCheckOutEntry, 
+  updateTimeEntry, 
+  deleteTimeEntry 
+} from '@/lib/timeEntries';
 
-interface TimeEntry {
+// TimeEntry 타입 정의
+type TimeEntry = {
   id: string;
-  check_in: string; // Supabase 컬럼명에 맞게 변경
+  date: string;
+  check_in: string | null;
   check_out: string | null;
   working_hours: number | null;
-  date: string; // 날짜 필드 추가
-}
+  user_id?: string;
+};
 
-export default function AttendancePage() {
+export default function HomePage() {
+  const { user, isLoading: authLoading } = useAuth();
+  const router = useRouter();
+  const [currentTime, setCurrentTime] = useState<Date | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [todayEntries, setTodayEntries] = useState<any[]>([]);
   const [isCheckedIn, setIsCheckedIn] = useState(false);
   const [checkInTime, setCheckInTime] = useState<Date | null>(null);
   const [checkOutTime, setCheckOutTime] = useState<Date | null>(null);
   const [workingHours, setWorkingHours] = useState<string | null>(null);
-  const [todayEntries, setTodayEntries] = useState<TimeEntry[]>([]);
-  const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null);
-  const [editCheckInTime, setEditCheckInTime] = useState<string>('');
-  const [editCheckOutTime, setEditCheckOutTime] = useState<string>('');
-  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
-  // 현재 시간을 1초마다 업데이트
-  const [currentTime, setCurrentTime] = useState<Date | null>(null);
-  const [isClient, setIsClient] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<any | null>(null);
+  const [editCheckInTime, setEditCheckInTime] = useState('');
+  const [editCheckOutTime, setEditCheckOutTime] = useState('');
   
   useEffect(() => {
-    // 클라이언트 사이드에서만 시간 설정
-    setIsClient(true);
     setCurrentTime(new Date());
     
     const timer = setInterval(() => {
@@ -214,15 +221,81 @@ export default function AttendancePage() {
     }
   };
   
-  // 근무 시간 포맷팅
-  const formatWorkingHours = (hours: number | null) => {
-    if (hours === null) return '-';
-    const wholeHours = Math.floor(hours);
-    const minutes = Math.round((hours - wholeHours) * 60);
-    return `${wholeHours}시간 ${minutes}분`;
+  // 로그인 페이지로 이동
+  const goToLogin = () => {
+    router.push('/login');
   };
 
-  // 나머지 JSX 부분은 기존과 동일하게 유지하되, 필드명만 변경
-  // 예: entry.checkIn -> entry.check_in, entry.checkOut -> entry.check_out, entry.workingHours -> entry.working_hours
-  // 그리고 deleteEntry -> deleteEntryHandler로 함수명 변경
+  // 대시보드로 이동
+  const goToDashboard = () => {
+    router.push('/dashboard');
+  };
+
+  return (
+    <div className="container mx-auto px-4 py-12">
+      <div className="max-w-4xl mx-auto">
+        <div className="text-center mb-12">
+          <h1 className="text-4xl md:text-5xl font-bold text-primary mb-4">TimeTracker</h1>
+          <p className="text-xl text-gray-600 mb-8">효율적인 근무 시간 관리를 위한 최적의 솔루션</p>
+          
+          {!isLoading && (
+            user ? (
+              <div className="mt-8">
+                <button 
+                  onClick={goToDashboard}
+                  className="bg-primary text-white px-6 py-3 rounded-md font-medium hover:bg-blue-700 transition-colors"
+                >
+                  대시보드로 이동
+                </button>
+              </div>
+            ) : (
+              <div className="mt-8">
+                <button 
+                  onClick={goToLogin}
+                  className="flex items-center justify-center mx-auto bg-gray-800 text-white px-6 py-3 rounded-md font-medium hover:bg-gray-700 transition-colors"
+                >
+                  <FaGithub className="mr-2" />
+                  GitHub로 시작하기
+                </button>
+                <p className="text-sm text-gray-500 mt-2">별도의 회원가입 없이 GitHub 계정으로 바로 이용할 수 있습니다.</p>
+              </div>
+            )
+          )}
+        </div>
+        
+        <div className="grid md:grid-cols-3 gap-8 mb-12">
+          <div className="bg-white p-6 rounded-lg shadow-md">
+            <div className="flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full mb-4 mx-auto">
+              <FaClock className="text-primary text-xl" />
+            </div>
+            <h3 className="text-xl font-semibold text-center mb-2">간편한 출퇴근 기록</h3>
+            <p className="text-gray-600 text-center">버튼 클릭 한 번으로 출퇴근 시간을 기록하고 관리할 수 있습니다.</p>
+          </div>
+          
+          <div className="bg-white p-6 rounded-lg shadow-md">
+            <div className="flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full mb-4 mx-auto">
+              <FaChartBar className="text-primary text-xl" />
+            </div>
+            <h3 className="text-xl font-semibold text-center mb-2">직관적인 대시보드</h3>
+            <p className="text-gray-600 text-center">달력 형태의 대시보드로 월별 근무 시간을 한눈에 확인할 수 있습니다.</p>
+          </div>
+          
+          <div className="bg-white p-6 rounded-lg shadow-md">
+            <div className="flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full mb-4 mx-auto">
+              <FaUserAlt className="text-primary text-xl" />
+            </div>
+            <h3 className="text-xl font-semibold text-center mb-2">개인화된 설정</h3>
+            <p className="text-gray-600 text-center">사용자별 프로필 설정으로 자신만의 근무 시간 목표를 관리할 수 있습니다.</p>
+          </div>
+        </div>
+        
+        <div className="bg-gray-50 p-6 rounded-lg border border-gray-200">
+          <h3 className="text-xl font-semibold mb-4 text-center">현재 시간</h3>
+          <p className="text-2xl font-bold text-center text-primary">
+            {currentTime ? currentTime.toLocaleTimeString('ko-KR') : ''}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
 }
