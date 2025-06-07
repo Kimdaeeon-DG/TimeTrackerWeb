@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { FaGithub, FaClock, FaChartBar, FaUserAlt } from 'react-icons/fa';
+import { FaGoogle, FaClock, FaChartBar, FaUserAlt } from 'react-icons/fa';
 import { useAuth } from '@/context/AuthContext';
 import { format } from 'date-fns';
 import { 
@@ -252,12 +252,12 @@ export default function HomePage() {
               <div className="mt-8">
                 <button 
                   onClick={goToLogin}
-                  className="flex items-center justify-center mx-auto bg-gray-800 text-white px-6 py-3 rounded-md font-medium hover:bg-gray-700 transition-colors"
+                  className="flex items-center justify-center mx-auto bg-white text-gray-700 border border-gray-300 px-6 py-3 rounded-md font-medium hover:bg-gray-50 transition-colors shadow-sm"
                 >
-                  <FaGithub className="mr-2" />
-                  GitHub로 시작하기
+                  <FaGoogle className="mr-2 text-blue-500" />
+                  Google로 시작하기
                 </button>
-                <p className="text-sm text-gray-500 mt-2">별도의 회원가입 없이 GitHub 계정으로 바로 이용할 수 있습니다.</p>
+                <p className="text-sm text-gray-500 mt-2">별도의 회원가입 없이 Google 계정으로 바로 이용할 수 있습니다.</p>
               </div>
             )
           )}
