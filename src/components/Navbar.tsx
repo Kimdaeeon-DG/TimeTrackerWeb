@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { FaGithub } from 'react-icons/fa';
+import { FaGoogle } from 'react-icons/fa';
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -17,7 +17,7 @@ export default function Navbar() {
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center">
-            <Link href="/" className="flex-shrink-0 font-bold text-xl">
+            <Link href="/" className="flex-shrink-0 font-bold text-xl tracking-wide">
               TimeTracker
             </Link>
           </div>
@@ -36,12 +36,6 @@ export default function Navbar() {
                 >
                   출퇴근 기록
                 </Link>
-                <Link 
-                  href="/profile" 
-                  className={`px-3 py-2 rounded-md text-sm font-medium mx-1 hover:bg-blue-700 ${isActive('/profile')}`}
-                >
-                  프로필
-                </Link>
                 <button 
                   onClick={signOut}
                   className="px-3 py-2 rounded-md text-sm font-medium mx-1 hover:bg-blue-700"
@@ -54,7 +48,7 @@ export default function Navbar() {
                 href="/login" 
                 className={`flex items-center px-3 py-2 rounded-md text-sm font-medium mx-1 hover:bg-blue-700 ${isActive('/login')}`}
               >
-                <FaGithub className="mr-2" />
+                <FaGoogle className="mr-2 text-white" />
                 로그인
               </Link>
             )}

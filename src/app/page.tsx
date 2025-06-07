@@ -235,8 +235,8 @@ export default function HomePage() {
     <div className="container mx-auto px-4 py-12">
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-12">
-          <h1 className="text-4xl md:text-5xl font-bold text-primary mb-4">TimeTracker</h1>
-          <p className="text-xl text-gray-600 mb-8">효율적인 근무 시간 관리를 위한 최적의 솔루션</p>
+          <h1 className="text-4xl md:text-5xl font-bold text-primary mb-4 tracking-wide">TimeTracker</h1>
+          <p className="text-xl text-gray-600 mb-8 leading-relaxed">효율적인 근무 시간 관리를 위한 최적의 솔루션</p>
           
           {!isLoading && (
             user ? (
@@ -252,7 +252,7 @@ export default function HomePage() {
               <div className="mt-8">
                 <button 
                   onClick={goToLogin}
-                  className="flex items-center justify-center mx-auto bg-white text-gray-700 border border-gray-300 px-6 py-3 rounded-md font-medium hover:bg-gray-50 transition-colors shadow-sm"
+                  className="flex items-center justify-center mx-auto bg-white text-gray-700 border border-gray-300 px-6 py-3 rounded-md font-medium hover:bg-gray-50 transition-colors shadow-md"
                 >
                   <FaGoogle className="mr-2 text-blue-500" />
                   Google로 시작하기
@@ -263,7 +263,7 @@ export default function HomePage() {
           )}
         </div>
         
-        <div className="grid md:grid-cols-3 gap-8 mb-12">
+        <div className="grid md:grid-cols-2 gap-8 mb-12">
           <div className="bg-white p-6 rounded-lg shadow-md">
             <div className="flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full mb-4 mx-auto">
               <FaClock className="text-primary text-xl" />
@@ -278,14 +278,6 @@ export default function HomePage() {
             </div>
             <h3 className="text-xl font-semibold text-center mb-2">직관적인 대시보드</h3>
             <p className="text-gray-600 text-center">달력 형태의 대시보드로 월별 근무 시간을 한눈에 확인할 수 있습니다.</p>
-          </div>
-          
-          <div className="bg-white p-6 rounded-lg shadow-md">
-            <div className="flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full mb-4 mx-auto">
-              <FaUserAlt className="text-primary text-xl" />
-            </div>
-            <h3 className="text-xl font-semibold text-center mb-2">개인화된 설정</h3>
-            <p className="text-gray-600 text-center">사용자별 프로필 설정으로 자신만의 근무 시간 목표를 관리할 수 있습니다.</p>
           </div>
         </div>
         

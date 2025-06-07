@@ -23,6 +23,7 @@ export default function AttendancePage() {
   const [editDate, setEditDate] = useState<string>('');
   const [editCheckInTime, setEditCheckInTime] = useState<string>('');
   const [editCheckOutTime, setEditCheckOutTime] = useState<string>('');
+  const [todayTotalWorkingHours, setTodayTotalWorkingHours] = useState<number>(0);
   
   // 로딩 및 에러 상태 추가
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -54,30 +55,68 @@ export default function AttendancePage() {
     setError(null);
     
     try {
+      // 환경 변수 확인
+      if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+        console.error('Supabase 환경 변수가 설정되지 않았습니다');
+        setError('Supabase 설정이 올바르지 않습니다. 관리자에게 문의하세요.');
+        setIsLoading(false);
+        return;
+      }
+      
+      console.log('기록 불러오기 시작...');
       const today = format(new Date(), 'yyyy-MM-dd');
+      console.log('오늘 날짜:', today);
+      
       const entries = await getTimeEntriesByDate(today);
+      console.log('불러온 기록:', entries);
       
       setTodayEntries(entries);
       
+      // 오늘의 총 근무 시간 계산
+      let totalHours = 0;
+      if (entries && entries.length > 0) {
+        totalHours = entries.reduce((total, entry) => {
+          // 완료된 기록만 계산에 포함
+          if (entry.working_hours !== null) {
+            return total + entry.working_hours;
+          }
+          // 현재 진행 중인 기록은 현재 시간까지 계산
+          else if (entry.check_in && !entry.check_out) {
+            const checkInTime = new Date(entry.check_in);
+            const now = new Date();
+            const diffHours = (now.getTime() - checkInTime.getTime()) / (1000 * 60 * 60);
+            return total + diffHours;
+          }
+          return total;
+        }, 0);
+      }
+      setTodayTotalWorkingHours(totalHours);
+      
       // 마지막 출근 기록 확인
-      if (entries.length > 0) {
+      if (entries && entries.length > 0) {
         const lastEntry = entries[entries.length - 1];
+        console.log('마지막 기록:', lastEntry);
+        
         if (lastEntry && lastEntry.check_in && !lastEntry.check_out) {
           // 출근만 했고 퇴근은 안 한 상태
+          console.log('출근 상태 감지됨');
           setIsCheckedIn(true);
           setCheckInTime(new Date(lastEntry.check_in));
         } else {
           // 출퇴근 모두 완료한 상태
+          console.log('출근 상태 아님');
           setIsCheckedIn(false);
         }
       } else {
         // 기록 없음
+        console.log('오늘 기록 없음');
         setIsCheckedIn(false);
       }
     } catch (err) {
       console.error('Error loading today\'s records:', err);
-      setError('기록을 불러오는 중 오류가 발생했습니다.');
+      setError(`기록을 불러오는 중 오류가 발생했습니다: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
+      console.log('기록 불러오기 완료');
       setIsLoading(false);
     }
   };
@@ -87,11 +126,22 @@ export default function AttendancePage() {
       setIsLoading(true);
       setError(null);
       
+      // 환경 변수 확인
+      if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+        console.error('Supabase 환경 변수가 설정되지 않았습니다');
+        setError('Supabase 설정이 올바르지 않습니다. 관리자에게 문의하세요.');
+        setIsLoading(false);
+        return;
+      }
+      
+      console.log('출근 처리 시작...');
       const now = new Date();
       const today = format(now, 'yyyy-MM-dd');
+      console.log('출근 시간:', now.toISOString());
       
       // Supabase에 새 출근 기록 저장
       const newEntry = await createCheckInEntry(today, now.toISOString());
+      console.log('생성된 출근 기록:', newEntry);
       
       if (newEntry) {
         setIsCheckedIn(true);
@@ -100,12 +150,16 @@ export default function AttendancePage() {
         setWorkingHours(null);
         
         // 오늘의 기록 다시 불러오기
-        loadTodayRecords();
+        console.log('출근 처리 성공, 기록 다시 불러오기');
+        await loadTodayRecords();
+      } else {
+        setError('출근 기록 생성에 실패했습니다.');
       }
     } catch (err) {
       console.error('Error checking in:', err);
-      setError('출근 처리 중 오류가 발생했습니다.');
+      setError(`출근 처리 중 오류가 발생했습니다: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
+      console.log('출근 처리 완료');
       setIsLoading(false);
     }
   };
@@ -305,6 +359,16 @@ export default function AttendancePage() {
               퇴근하기
             </button>
           )}
+        </div>
+      </div>
+      
+      {/* 오늘의 근무 시간 요약 */}
+      <div className="bg-white shadow rounded-lg p-6 mb-6">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-semibold">오늘의 근무 시간</h2>
+          <div className="text-2xl font-bold text-blue-600">
+            {formatWorkingHours(todayTotalWorkingHours)}
+          </div>
         </div>
       </div>
       

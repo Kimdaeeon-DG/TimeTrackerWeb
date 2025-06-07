@@ -277,7 +277,7 @@ export default function Dashboard() {
               <p className="text-2xl font-bold">{timeEntries.filter(entry => entry.date.startsWith(format(currentMonth, 'yyyy-MM'))).length > 0 ? Array.from(new Set(timeEntries.filter(entry => entry.date.startsWith(format(currentMonth, 'yyyy-MM'))).map(entry => entry.date))).length : 0}일</p>
             </div>
             <div className="bg-purple-50 p-4 rounded-lg">
-              <p className="text-gray-600">80시간 중 남은 시간</p>
+              <p className="text-gray-600">남은 근무 시간</p>
               <p className="text-2xl font-bold">
                 {totalWorkingHours < 80 
                   ? formatWorkingHours(80 - totalWorkingHours)
