@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, parseISO, differenceInHours, differenceInMinutes } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, parseISO, differenceInHours, differenceInMinutes, isAfter, isSameDay, addDays, startOfDay, endOfDay } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { getAllTimeEntries, updateTimeEntry, deleteTimeEntry } from '../../lib/timeEntries';
 
@@ -169,6 +169,10 @@ export default function Dashboard() {
         }
         
         workingHoursValue = diffMs / (1000 * 60 * 60);
+        
+        // 날짜가 바뀌는 경우 처리 (자정을 넘어가는 경우)
+        // 이 부분은 데이터베이스에 저장되는 총 근무 시간이므로 그대로 유지
+        // 실제 날짜별 분할은 달력 표시 시 계산됨
       }
       
       // Supabase에 수정된 기록 업데이트 (날짜 포함)
@@ -325,18 +329,43 @@ export default function Dashboard() {
           {/* 날짜 */}
           {monthDays.map((day) => {
             const dateStr = format(day, 'yyyy-MM-dd');
-            const entriesForDate = timeEntries.filter(entry => entry.date === dateStr);
-            const hasRecord = entriesForDate.length > 0;
+            const dayStart = startOfDay(day);
+            const dayEnd = endOfDay(day);
+            
+            // 해당 날짜에 속한 근무 시간 계산 (날짜가 넘어가는 경우 분할 계산)
+            let totalHours = 0;
+            
+            // 모든 기록에 대해 확인
+            timeEntries.forEach(entry => {
+              if (!entry.check_in || !entry.check_out) return;
+              
+              const checkIn = parseISO(entry.check_in);
+              const checkOut = parseISO(entry.check_out);
+              
+              // 해당 날짜에 속하는 시간 계산
+              if (
+                (checkIn <= dayEnd && checkOut >= dayStart) || // 근무 시간이 현재 날짜와 겹치는 경우
+                (checkIn <= dayEnd && checkOut < dayStart && !isSameDay(checkIn, checkOut)) // 날짜를 넘어가는 경우
+              ) {
+                // 해당 날짜의 시작과 끝 시간 계산
+                const periodStart = checkIn > dayStart ? checkIn : dayStart;
+                const periodEnd = checkOut < dayEnd ? checkOut : dayEnd;
+                
+                // 음수가 되지 않도록 체크
+                if (isAfter(periodEnd, periodStart)) {
+                  const hoursWorked = differenceInHours(periodEnd, periodStart) + 
+                                      (differenceInMinutes(periodEnd, periodStart) % 60) / 60;
+                  totalHours += hoursWorked;
+                }
+              }
+            });
+            
+            const hasRecord = totalHours > 0;
             const isSelected = selectedDate === dateStr;
             
             // 근무 시간에 따른 배경색 계산
             let bgColorClass = '';
             if (hasRecord) {
-              // 총 근무 시간 계산
-              const totalHours = entriesForDate.reduce((sum: number, entry: TimeEntry) => {
-                return sum + (entry.working_hours || 0);
-              }, 0);
-              
               if (totalHours >= 8) {
                 bgColorClass = 'bg-green-100';
               } else if (totalHours >= 4) {
@@ -357,7 +386,7 @@ export default function Dashboard() {
                 </div>
                 {hasRecord && (
                   <div className="text-xs mt-1 text-gray-600">
-                    {formatWorkingHours(entriesForDate.reduce((sum: number, entry: TimeEntry) => sum + (entry.working_hours || 0), 0), true)}
+                    {formatWorkingHours(totalHours, true)}
                   </div>
                 )}
               </div>
@@ -426,9 +455,9 @@ export default function Dashboard() {
                     </div>
                   ) : (
                     // 읽기 모드 - 스와이프 기능 추가
-                    <div className="group overflow-hidden">
-                      {/* 삭제 버튼 (스와이프로 노출) */}
-                      <div className="absolute right-0 top-0 bottom-0 bg-red-500 text-white flex items-center justify-center w-16 transform translate-x-full group-hover:translate-x-0 transition-transform duration-200">
+                    <div className="group overflow-hidden touch-pan-x">
+                      {/* 삭제 버튼 (스와이프로만 노출) */}
+                      <div className="absolute right-0 top-0 bottom-0 bg-red-500 text-white flex items-center justify-center w-16 transform translate-x-full group-[.swiped]:translate-x-0 transition-transform duration-200">
                         <button 
                           onClick={() => deleteEntryHandler(entry.id)}
                           className="w-full h-full flex items-center justify-center"
@@ -439,8 +468,25 @@ export default function Dashboard() {
                       
                       {/* 기록 내용 (클릭하면 수정 모드로 전환) */}
                       <div 
-                        className="p-4 bg-white flex justify-between items-center transform group-hover:-translate-x-16 transition-transform duration-200 cursor-pointer"
+                        className="p-4 bg-white flex justify-between items-center transform group-[.swiped]:-translate-x-16 transition-transform duration-200 cursor-pointer"
                         onClick={() => startEditing(entry)}
+                        onTouchStart={(e) => {
+                          // 터치 시작 위치 저장
+                          e.currentTarget.dataset.touchStartX = e.touches[0].clientX.toString();
+                        }}
+                        onTouchMove={(e) => {
+                          const touchStartX = parseInt(e.currentTarget.dataset.touchStartX || '0');
+                          const currentX = e.touches[0].clientX;
+                          const diff = touchStartX - currentX;
+                          
+                          // 왼쪽으로 스와이프하는 경우 (diff > 0)
+                          if (diff > 50) { // 50px 이상 스와이프 시 활성화
+                            e.currentTarget.parentElement?.classList.add('swiped');
+                          } else if (diff < -50) { // 오른쪽으로 스와이프하면 원래대로
+                            e.currentTarget.parentElement?.classList.remove('swiped');
+                          }
+                        }}
+                        onTouchEnd={() => {}}
                       >
                         <div className="flex items-center space-x-2">
                           <div className="bg-blue-100 text-blue-800 rounded-full w-8 h-8 flex items-center justify-center">

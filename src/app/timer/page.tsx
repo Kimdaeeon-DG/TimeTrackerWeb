@@ -24,6 +24,7 @@ export default function AttendancePage() {
   const [editCheckInTime, setEditCheckInTime] = useState<string>('');
   const [editCheckOutTime, setEditCheckOutTime] = useState<string>('');
   const [todayTotalWorkingHours, setTodayTotalWorkingHours] = useState<number>(0);
+  const [activeSwipeId, setActiveSwipeId] = useState<string | null>(null);
   
   // 로딩 및 에러 상태 추가
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -309,6 +310,38 @@ export default function AttendancePage() {
     const minutes = Math.round((hours - wholeHours) * 60);
     return `${wholeHours}시간 ${minutes}분`;
   };
+  
+  // 스와이프 기능을 위한 변수
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
+  
+  // 터치 시작 이벤트 처리
+  const handleTouchStart = (e: React.TouchEvent, id: string) => {
+    setTouchStart(e.targetTouches[0].clientX);
+    setTouchEnd(null); // 초기화
+  };
+  
+  // 터치 이동 이벤트 처리
+  const handleTouchMove = (e: React.TouchEvent, id: string) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+    
+    // 왼쪽으로 스와이프하면 삭제 버튼 표시
+    if (touchStart && touchEnd && touchStart - touchEnd > 50) {
+      setActiveSwipeId(id);
+    } else if (touchStart && touchEnd && touchEnd - touchStart > 50) {
+      // 오른쪽으로 스와이프하면 삭제 버튼 숨김
+      setActiveSwipeId(null);
+    }
+  };
+  
+  // 터치 종료 이벤트 처리
+  const handleTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    
+    // 터치 상태 초기화
+    setTouchStart(null);
+    setTouchEnd(null);
+  };
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -362,19 +395,12 @@ export default function AttendancePage() {
         </div>
       </div>
       
-      {/* 오늘의 근무 시간 요약 */}
-      <div className="bg-white shadow rounded-lg p-6 mb-6">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold">오늘의 근무 시간</h2>
-          <div className="text-2xl font-bold text-blue-600">
-            {formatWorkingHours(todayTotalWorkingHours)}
-          </div>
-        </div>
-      </div>
+      {/* 오늘의 근무 시간 요약 - 삭제 */}
       
       {/* 오늘의 출퇴근 기록 목록 */}
       <div className="bg-white shadow rounded-lg p-6 mb-6">
-        <h2 className="text-xl font-semibold mb-4">오늘의 출퇴근 기록</h2>
+        <h2 className="text-xl font-semibold mb-2">오늘의 출퇴근 기록</h2>
+        <p className="text-sm text-gray-500 mb-4">총 근무시간: {formatWorkingHours(todayTotalWorkingHours)}</p>
         
         {isLoading ? (
           <p className="text-center py-4">기록을 불러오는 중...</p>
@@ -432,10 +458,10 @@ export default function AttendancePage() {
                       </div>
                     </div>
                   ) : (
-                    // 읽기 모드 - 스와이프 기능 추가
-                    <div className="group overflow-hidden">
-                      {/* 삭제 버튼 (스와이프로 노출) */}
-                      <div className="absolute right-0 top-0 bottom-0 bg-red-500 text-white flex items-center justify-center w-16 transform translate-x-full group-hover:translate-x-0 transition-transform duration-200">
+                    // 읽기 모드 - 스와이프 기능 추가 (터치 시 스와이프 없이 수정 모드로 전환되도록 수정)
+                    <div className="relative overflow-hidden">
+                      {/* 삭제 버튼 (스와이프로만 노출) */}
+                      <div className="absolute right-0 top-0 bottom-0 bg-red-500 text-white flex items-center justify-center w-16">
                         <button 
                           onClick={() => deleteEntryHandler(entry.id)}
                           className="w-full h-full flex items-center justify-center"
@@ -446,8 +472,11 @@ export default function AttendancePage() {
                       
                       {/* 기록 내용 (클릭하면 수정 모드로 전환) */}
                       <div 
-                        className="p-4 bg-white flex justify-between items-center transform group-hover:-translate-x-16 transition-transform duration-200 cursor-pointer"
+                        className={`p-4 bg-white flex justify-between items-center cursor-pointer transform transition-transform duration-200 ${activeSwipeId === entry.id ? '-translate-x-16' : 'translate-x-0'}`}
                         onClick={() => startEditing(entry)}
+                        onTouchStart={(e) => handleTouchStart(e, entry.id)}
+                        onTouchMove={(e) => handleTouchMove(e, entry.id)}
+                        onTouchEnd={() => handleTouchEnd()}
                       >
                         <div>
                           <div className="font-medium">
@@ -473,35 +502,6 @@ export default function AttendancePage() {
           <p className="text-gray-500 text-center py-4">오늘의 출퇴근 기록이 없습니다.</p>
         )}
       </div>
-      
-      {/* 현재 출퇴근 상태 */}
-      {(checkInTime || checkOutTime) && (
-        <div className="bg-white shadow rounded-lg p-6">
-          <h2 className="text-xl font-semibold mb-4">현재 상태</h2>
-          <div className="space-y-3">
-            {checkInTime && (
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">출근 시간:</span>
-                <span className="font-medium">{format(checkInTime, 'HH:mm:ss')}</span>
-              </div>
-            )}
-            
-            {checkOutTime && (
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">퇴근 시간:</span>
-                <span className="font-medium">{format(checkOutTime, 'HH:mm:ss')}</span>
-              </div>
-            )}
-            
-            {workingHours && (
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">근무 시간:</span>
-                <span className="font-medium">{workingHours}</span>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
