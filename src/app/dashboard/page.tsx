@@ -99,10 +99,16 @@ export default function Dashboard() {
   // 달력의 첫 번째 날의 요일 (0: 일요일, 1: 월요일, ...)
   const startDay = getDay(monthStart);
   
-  // 날짜 선택 시 해당 날짜의 기록 표시
+  // 날짜 선택 시 해당 날짜의 기록 표시 (시간 순서대로 정렬)
   const handleDateClick = (date: string) => {
     setSelectedDate(date);
-    const entriesForDate = timeEntries.filter(entry => entry.date === date);
+    const entriesForDate = timeEntries.filter(entry => entry.date === date)
+      .sort((a, b) => {
+        // check_in 시간을 기준으로 오름차순 정렬
+        const timeA = a.check_in ? new Date(a.check_in).getTime() : 0;
+        const timeB = b.check_in ? new Date(b.check_in).getTime() : 0;
+        return timeA - timeB;
+      });
     setSelectedDateEntries(entriesForDate);
   };
   
@@ -199,7 +205,13 @@ export default function Dashboard() {
         // 날짜가 변경되었다면 새 날짜로 선택 변경
         if (editDate !== editingEntry.date) {
           setSelectedDate(editDate);
-          const entriesForNewDate = entries.filter(entry => entry.date === editDate);
+          const entriesForNewDate = entries.filter(entry => entry.date === editDate)
+            .sort((a, b) => {
+              // check_in 시간을 기준으로 오름차순 정렬
+              const timeA = a.check_in ? new Date(a.check_in).getTime() : 0;
+              const timeB = b.check_in ? new Date(b.check_in).getTime() : 0;
+              return timeA - timeB;
+            });
           setSelectedDateEntries(entriesForNewDate);
         }
       }
