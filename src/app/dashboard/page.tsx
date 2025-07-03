@@ -299,8 +299,8 @@ export default function Dashboard() {
             <div className="bg-purple-50 p-4 rounded-lg">
               <p className="text-gray-600">남은 근무 시간</p>
               <p className="text-2xl font-bold">
-                {totalWorkingHours < 80 
-                  ? formatWorkingHours(80 - totalWorkingHours)
+                {totalWorkingHours < 100 
+                  ? formatWorkingHours(100 - totalWorkingHours)
                   : '0시간 0분'}
               </p>
             </div>
