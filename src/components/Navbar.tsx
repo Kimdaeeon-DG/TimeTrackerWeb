@@ -36,6 +36,12 @@ export default function Navbar() {
                 >
                   출퇴근 기록
                 </Link>
+                <Link 
+                  href="/schedule" 
+                  className={`px-3 py-2 rounded-md text-sm font-medium mx-1 hover:bg-blue-700 ${isActive('/schedule')}`}
+                >
+                  근무 계획
+                </Link>
                 <button 
                   onClick={signOut}
                   className="px-3 py-2 rounded-md text-sm font-medium mx-1 hover:bg-blue-700"
