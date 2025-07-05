@@ -221,8 +221,7 @@ export default function SchedulePlanner() {
         const schedules = await getWorkSchedulesByMonth(year, month);
         setWorkSchedules(schedules || []);
 
-        // 폼 초기화 및 추가 모드 비활성화
-        setIsAddingNew(false);
+        // 폼 초기화 및 추가 모드 유지 (연속으로 일정 추가 가능하도록)
         resetScheduleForm();
         toast.success('새 근무 일정이 추가되었습니다.');
 
