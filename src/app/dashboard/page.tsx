@@ -89,14 +89,10 @@ export default function Dashboard() {
         console.log('Loaded entries:', entries);
         setTimeEntries(entries || []);
         
-        // 현재 월에 해당하는 기록만 필터링
-        const currentMonthStr = format(currentMonth, 'yyyy-MM');
-        const currentMonthEntries = entries ? entries.filter(entry => entry.date.startsWith(currentMonthStr)) : [];
-        
-        // 현재 월의 총 근무 시간 계산
+        // 총 근무 시간 계산
         let totalHours = 0;
-        if (currentMonthEntries.length > 0) {
-          currentMonthEntries.forEach((entry) => {
+        if (entries && entries.length > 0) {
+          entries.forEach((entry) => {
             if (entry.working_hours) {
               totalHours += entry.working_hours;
             }
@@ -130,7 +126,7 @@ export default function Dashboard() {
     if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
       loadData();
     }
-  }, [currentMonth]);
+  }, []);
   
   // 이전 달로 이동
   const prevMonth = () => {
