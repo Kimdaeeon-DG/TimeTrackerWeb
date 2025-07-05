@@ -10,11 +10,14 @@ export async function getWorkSchedulesByMonth(year, month) {
     return [];
   }
   
+  // 월 포맷팅 (1자리 -> 2자리)
+  const formattedMonth = month.toString().padStart(2, '0');
+  
   // 해당 월의 시작일과 종료일 계산
-  const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-  const endMonth = month === 12 ? 1 : month + 1;
-  const endYear = month === 12 ? year + 1 : year;
-  const endDate = `${endYear}-${String(endMonth).padStart(2, '0')}-01`;
+  const startDate = `${year}-${formattedMonth}-01`;
+  const endDate = month === 12 
+    ? `${year + 1}-01-01` 
+    : `${year}-${(month + 1).toString().padStart(2, '0')}-01`;
   
   const { data, error } = await supabase
     .from('work_schedules')
@@ -30,7 +33,7 @@ export async function getWorkSchedulesByMonth(year, month) {
     return [];
   }
   
-  return data;
+  return data || [];
 }
 
 // 특정 날짜의 근무 계획 가져오기
@@ -51,15 +54,15 @@ export async function getWorkSchedulesByDate(date) {
     .order('start_time', { ascending: true });
   
   if (error) {
-    console.error('Error fetching work schedules:', error);
+    console.error('Error fetching work schedules for date:', error);
     return [];
   }
   
-  return data;
+  return data || [];
 }
 
 // 새로운 근무 계획 생성
-export async function createWorkSchedule(date, startTime, endTime, plannedHours, description = '') {
+export async function createWorkSchedule(date, startTime, endTime, plannedHours) {
   // 현재 로그인한 사용자 정보 가져오기
   const { data: { user } } = await supabase.auth.getUser();
   
@@ -76,7 +79,6 @@ export async function createWorkSchedule(date, startTime, endTime, plannedHours,
         start_time: startTime,
         end_time: endTime,
         planned_hours: plannedHours,
-        description,
         user_id: user.id
       }
     ])
@@ -91,7 +93,7 @@ export async function createWorkSchedule(date, startTime, endTime, plannedHours,
 }
 
 // 근무 계획 수정
-export async function updateWorkSchedule(id, startTime, endTime, plannedHours, description = '') {
+export async function updateWorkSchedule(id, startTime, endTime, plannedHours) {
   // 현재 로그인한 사용자 정보 가져오기
   const { data: { user } } = await supabase.auth.getUser();
   
@@ -102,15 +104,14 @@ export async function updateWorkSchedule(id, startTime, endTime, plannedHours, d
   
   const { data, error } = await supabase
     .from('work_schedules')
-    .update({
+    .update({ 
       start_time: startTime,
       end_time: endTime,
       planned_hours: plannedHours,
-      description,
       updated_at: new Date().toISOString()
     })
     .eq('id', id)
-    .eq('user_id', user.id) // 현재 사용자의 데이터만 업데이트
+    .eq('user_id', user.id)
     .select();
   
   if (error) {
@@ -135,7 +136,7 @@ export async function deleteWorkSchedule(id) {
     .from('work_schedules')
     .delete()
     .eq('id', id)
-    .eq('user_id', user.id); // 현재 사용자의 데이터만 삭제
+    .eq('user_id', user.id);
   
   if (error) {
     console.error('Error deleting work schedule:', error);
@@ -145,27 +146,14 @@ export async function deleteWorkSchedule(id) {
   return true;
 }
 
-// 시간 문자열을 시간과 분으로 분리하는 유틸리티 함수
-export function parseTimeString(timeString) {
-  const [hours, minutes] = timeString.split(':').map(Number);
-  return { hours, minutes };
-}
-
-// 두 시간 사이의 시간 차이 계산 (시간 단위, 소수점 두 자리)
-export function calculateHoursBetween(startTime, endTime) {
-  const start = parseTimeString(startTime);
-  const end = parseTimeString(endTime);
+// 월별 총 계획 근무 시간 계산
+export async function getMonthlyPlannedHours(year, month) {
+  const schedules = await getWorkSchedulesByMonth(year, month);
   
-  // 시작 시간과 종료 시간을 분 단위로 변환
-  const startMinutes = start.hours * 60 + start.minutes;
-  const endMinutes = end.hours * 60 + end.minutes;
+  let totalPlannedHours = 0;
+  schedules.forEach(schedule => {
+    totalPlannedHours += parseFloat(schedule.planned_hours);
+  });
   
-  // 종료 시간이 시작 시간보다 이전인 경우 (다음 날로 넘어가는 경우)
-  let diffMinutes = endMinutes - startMinutes;
-  if (diffMinutes < 0) {
-    diffMinutes += 24 * 60; // 24시간(1440분) 추가
-  }
-  
-  // 분 단위를 시간 단위로 변환 (소수점 두 자리까지)
-  return parseFloat((diffMinutes / 60).toFixed(2));
+  return totalPlannedHours;
 }
