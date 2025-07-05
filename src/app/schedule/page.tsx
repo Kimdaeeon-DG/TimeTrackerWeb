@@ -4,7 +4,7 @@ import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, parseISO, 
 import { ko } from 'date-fns/locale';
 import { toast } from 'react-hot-toast';
 import Link from 'next/link';
-import { getWorkSchedulesByMonth, getWorkScheduleByDate, createOrUpdateWorkSchedule, deleteWorkSchedule } from '@/lib/timeEntries';
+import { getWorkSchedulesByMonth, getWorkSchedulesByDate, createWorkSchedule, updateWorkSchedule, deleteWorkSchedule } from '@/lib/timeEntries';
 
 // 타입 정의
 interface WorkSchedule {
@@ -23,6 +23,7 @@ export default function SchedulePlanner() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [workSchedules, setWorkSchedules] = useState<WorkSchedule[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [selectedDateSchedules, setSelectedDateSchedules] = useState<WorkSchedule[]>([]);
   const [selectedSchedule, setSelectedSchedule] = useState<WorkSchedule | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +32,7 @@ export default function SchedulePlanner() {
   const [plannedHours, setPlannedHours] = useState<number | ''>('');
   const [description, setDescription] = useState<string>('');
   const [isEditing, setIsEditing] = useState<boolean>(false);
+  const [isAddingNew, setIsAddingNew] = useState<boolean>(false);
 
   // 현재 월의 근무 계획 불러오기
   useEffect(() => {
@@ -78,41 +80,50 @@ export default function SchedulePlanner() {
   const startDay = getDay(monthStart);
 
   // 선택한 날짜의 근무 계획 정보 가져오기
-  const fetchSelectedDateSchedule = useCallback(async (date: Date) => {
+  const fetchSelectedDateSchedules = useCallback(async (date: Date) => {
     try {
-      const schedule = await getWorkScheduleByDate(format(date, 'yyyy-MM-dd'));
-      if (schedule) {
-        setStartTime(schedule.start_time || '09:00');
-        setEndTime(schedule.end_time || '18:00');
-        setPlannedHours(schedule.planned_hours);
-        setDescription(schedule.description || '');
-        setSelectedSchedule(schedule); // 선택된 스케줄 상태 설정
+      const schedules = await getWorkSchedulesByDate(format(date, 'yyyy-MM-dd'));
+      setSelectedDateSchedules(schedules || []);
+      
+      if (schedules && schedules.length > 0) {
+        // 기본적으로 첫 번째 스케줄 선택
+        const firstSchedule = schedules[0];
+        setSelectedSchedule(firstSchedule);
+        setStartTime(firstSchedule.start_time || '09:00');
+        setEndTime(firstSchedule.end_time || '18:00');
+        setPlannedHours(firstSchedule.planned_hours);
+        setDescription(firstSchedule.description || '');
       } else {
-        setStartTime('09:00');
-        setEndTime('18:00');
-        setPlannedHours('');
-        setDescription('');
-        setSelectedSchedule(null); // 스케줄이 없는 경우 null로 설정
+        // 스케줄이 없는 경우
+        resetScheduleForm();
+        setSelectedSchedule(null);
       }
     } catch (error) {
-      console.error('Error fetching schedule for selected date:', error);
+      console.error('Error fetching schedules for selected date:', error);
     }
   }, []);
+  
+  // 일정 양식 초기화
+  const resetScheduleForm = () => {
+    setStartTime('09:00');
+    setEndTime('18:00');
+    setPlannedHours('');
+    setDescription('');
+  };
 
   // 날짜 선택 시 해당 날짜의 근무 계획 표시
   const handleDateClick = async (date: string) => {
-    setSelectedDate(parseISO(date));
-    setIsEditing(false); // 날짜 선택 시 편집 모드 해제
-
     try {
-      setIsLoading(true);
-      await fetchSelectedDateSchedule(parseISO(date));
-
-      setIsLoading(false);
-    } catch (err: any) {
-      console.error('Error fetching schedule for date:', err);
-      setError(`근무 계획을 불러오는 중 오류가 발생했습니다: ${err.message || String(err)}`);
-      setIsLoading(false);
+      const selectedDate = parseISO(date);
+      setSelectedDate(selectedDate);
+      setIsEditing(false);
+      setIsAddingNew(false);
+      
+      // 선택한 날짜의 근무 계획 가져오기
+      await fetchSelectedDateSchedules(selectedDate);
+    } catch (error) {
+      console.error('Error handling date click:', error);
+      setError('날짜를 선택하는 중 오류가 발생했습니다.');
     }
   };
 
@@ -148,6 +159,25 @@ export default function SchedulePlanner() {
   const startEditing = () => {
     setIsEditing(true);
   };
+  
+  // 기존 근무 계획 수정
+  const handleEditClick = (schedule: WorkSchedule) => {
+    setSelectedSchedule(schedule);
+    setStartTime(schedule.start_time || '09:00');
+    setEndTime(schedule.end_time || '18:00');
+    setPlannedHours(schedule.planned_hours);
+    setDescription(schedule.description || '');
+    setIsEditing(true);
+    setIsAddingNew(false);
+  };
+  
+  // 새 근무 계획 추가 모드 전환
+  const handleAddNewClick = () => {
+    resetScheduleForm();
+    setIsAddingNew(true);
+    setIsEditing(false);
+    setSelectedSchedule(null);
+  };
 
   // 근무 계획 수정 취소
   const cancelEditing = () => {
@@ -156,25 +186,20 @@ export default function SchedulePlanner() {
       setEndTime(selectedSchedule.end_time || '18:00');
       setPlannedHours(selectedSchedule.planned_hours);
       setDescription(selectedSchedule.description || '');
-    } else {
-      setStartTime('09:00');
-      setEndTime('18:00');
-      setPlannedHours('');
-      setDescription('');
     }
     setIsEditing(false);
   };
-
-  // 근무 계획 저장
-  const saveSchedule = async () => {
+  
+  // 새 근무 계획 저장
+  const saveNewScheduleHandler = async () => {
     if (!selectedDate || plannedHours === '') return;
 
     try {
       setIsLoading(true);
       setError(null);
 
-      // 근무 계획 저장
-      const savedSchedule = await createOrUpdateWorkSchedule(
+      // 새 근무 계획 저장
+      const savedSchedule = await createWorkSchedule(
         format(selectedDate, 'yyyy-MM-dd'),
         startTime,
         endTime,
@@ -183,6 +208,9 @@ export default function SchedulePlanner() {
       );
 
       if (savedSchedule) {
+        // 선택한 날짜의 일정 다시 불러오기
+        const updatedSchedules = await getWorkSchedulesByDate(format(selectedDate, 'yyyy-MM-dd'));
+        setSelectedDateSchedules(updatedSchedules || []);
         setSelectedSchedule(savedSchedule);
 
         // 전체 근무 계획 다시 불러오기
@@ -191,11 +219,59 @@ export default function SchedulePlanner() {
         const schedules = await getWorkSchedulesByMonth(year, month);
         setWorkSchedules(schedules || []);
 
-        setIsEditing(false);
+        setIsAddingNew(false);
+        toast.success('새 근무 일정이 추가되었습니다.');
       }
     } catch (err: any) {
-      console.error('Error saving work schedule:', err);
+      console.error('Error saving new work schedule:', err);
       setError(`근무 계획을 저장하는 중 오류가 발생했습니다: ${err.message || String(err)}`);
+      toast.error('일정 추가 중 오류가 발생했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // 기존 근무 계획 업데이트
+  const updateScheduleHandler = async () => {
+    if (!selectedSchedule || plannedHours === '') return;
+
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      // 근무 계획 업데이트
+      const updatedSchedule = await updateWorkSchedule(
+        selectedSchedule.id,
+        startTime,
+        endTime,
+        plannedHours,
+        description
+      );
+
+      if (updatedSchedule) {
+        // 선택한 날짜의 일정 다시 불러오기
+        const updatedSchedules = await getWorkSchedulesByDate(format(selectedDate!, 'yyyy-MM-dd'));
+        setSelectedDateSchedules(updatedSchedules || []);
+        
+        // 수정된 일정을 선택하도록 설정
+        const found = updatedSchedules.find(s => s.id === updatedSchedule.id);
+        if (found) {
+          setSelectedSchedule(found);
+        }
+
+        // 전체 근무 계획 다시 불러오기
+        const year = currentMonth.getFullYear();
+        const month = currentMonth.getMonth() + 1;
+        const schedules = await getWorkSchedulesByMonth(year, month);
+        setWorkSchedules(schedules || []);
+
+        setIsEditing(false);
+        toast.success('근무 일정이 업데이트되었습니다.');
+      }
+    } catch (err: any) {
+      console.error('Error updating work schedule:', err);
+      setError(`근무 계획을 업데이트하는 중 오류가 발생했습니다: ${err.message || String(err)}`);
+      toast.error('일정 업데이트 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
     }
@@ -213,17 +289,32 @@ export default function SchedulePlanner() {
       const success = await deleteWorkSchedule(selectedSchedule.id);
 
       if (success) {
-        setSelectedSchedule(null);
-        setStartTime('09:00');
-        setEndTime('18:00');
-        setPlannedHours('');
-        setDescription('');
+        // 현재 선택한 날짜의 모든 일정 다시 불러오기
+        if (selectedDate) {
+          const updatedSchedules = await getWorkSchedulesByDate(format(selectedDate, 'yyyy-MM-dd'));
+          setSelectedDateSchedules(updatedSchedules || []);
+          
+          // 다른 일정이 없으면 폼 초기화, 있으면 첫번째 일정 선택
+          if (updatedSchedules.length === 0) {
+            resetScheduleForm();
+            setSelectedSchedule(null);
+          } else {
+            setSelectedSchedule(updatedSchedules[0]);
+            setStartTime(updatedSchedules[0].start_time || '09:00');
+            setEndTime(updatedSchedules[0].end_time || '18:00');
+            setPlannedHours(updatedSchedules[0].planned_hours);
+            setDescription(updatedSchedules[0].description || '');
+          }
+        }
 
         // 전체 근무 계획 다시 불러오기
         const year = currentMonth.getFullYear();
         const month = currentMonth.getMonth() + 1;
         const schedules = await getWorkSchedulesByMonth(year, month);
         setWorkSchedules(schedules || []);
+        
+        // 성공 메시지 표시
+        toast.success('일정이 삭제되었습니다.');
       }
     } catch (err: any) {
       console.error('Error deleting work schedule:', err);
@@ -235,8 +326,15 @@ export default function SchedulePlanner() {
 
   // 특정 날짜의 근무 계획 시간 가져오기
   const getPlannedHoursForDate = (dateStr: string): number => {
-    const schedule = workSchedules.find(s => s.date === dateStr);
-    return schedule ? schedule.planned_hours : 0;
+    // 해당 날짜의 모든 일정을 찾음
+    const schedules = workSchedules.filter(s => s.date === dateStr);
+    // 총 계획 시간 계산
+    return schedules.reduce((total, schedule) => total + schedule.planned_hours, 0);
+  };
+  
+  // 특정 날짜의 일정 개수 가져오기
+  const getScheduleCountForDate = (dateStr: string): number => {
+    return workSchedules.filter(s => s.date === dateStr).length;
   };
 
   // 이번 달 총 계획 근무 시간 계산
@@ -335,52 +433,57 @@ export default function SchedulePlanner() {
                   </div>
                 ))}
 
-                {/* 빈 칸 채우기 (월의 첫 날 이전) */}
-                {Array.from({ length: startDay }).map((_, index) => (
-                  <div key={`empty-${index}`} className="p-2"></div>
-                ))}
+              {/* 빈 칸 채우기 (월의 첫 날 이전) */}
+              {Array.from({ length: startDay }).map((_, index) => (
+                <div key={`empty-${index}`} className="p-2"></div>
+              ))}
 
-                {/* 날짜 */}
-                {monthDays.map((day) => {
-                  const dateStr = format(day, 'yyyy-MM-dd');
-                  const plannedHours = getPlannedHoursForDate(dateStr);
-                  const isSelected = selectedDate && format(selectedDate, 'yyyy-MM-dd') === dateStr;
+              {/* 날짜 */}
+              {monthDays.map((day) => {
+                const dateStr = format(day, 'yyyy-MM-dd');
+                const plannedHours = getPlannedHoursForDate(dateStr);
+                const scheduleCount = getScheduleCountForDate(dateStr);
+                const isSelected = selectedDate && format(selectedDate, 'yyyy-MM-dd') === dateStr;
 
-                  // 계획된 근무 시간에 따른 배경색 계산
-                  let bgColorClass = '';
-                  if (plannedHours > 0) {
-                    if (plannedHours >= 8) {
-                      bgColorClass = 'bg-green-100';
-                    } else if (plannedHours >= 4) {
-                      bgColorClass = 'bg-yellow-100';
-                    } else {
-                      bgColorClass = 'bg-red-100';
-                    }
+                // 계획된 근무 시간에 따른 배경색 계산
+                let bgColorClass = '';
+                if (plannedHours > 0) {
+                  if (plannedHours >= 8) {
+                    bgColorClass = 'bg-green-100';
+                  } else if (plannedHours >= 4) {
+                    bgColorClass = 'bg-yellow-100';
+                  } else {
+                    bgColorClass = 'bg-red-100';
                   }
+                }
 
-                  const schedule = workSchedules.find(s => s.date === dateStr);
-                  return (
-                    <div
-                      key={dateStr}
-                      className={`h-16 md:h-24 p-1 border ${isSelected ? 'ring-2 ring-indigo-500' : ''} ${bgColorClass}`}
-                      onClick={() => handleDateClick(dateStr)}
-                    >
-                      <div className="flex justify-between">
-                        <span className={`text-sm font-medium ${getDay(day) === 6 ? 'text-blue-600' : getDay(day) === 0 ? 'text-red-600' : ''}`}>
-                          {format(day, 'd')}
+                return (
+                  <div
+                    key={dateStr}
+                    className={`h-16 md:h-24 p-1 border ${isSelected ? 'ring-2 ring-indigo-500' : ''} ${bgColorClass}`}
+                    onClick={() => handleDateClick(dateStr)}
+                  >
+                    <div className="flex justify-between">
+                      <span className={`text-sm font-medium ${getDay(day) === 6 ? 'text-blue-600' : getDay(day) === 0 ? 'text-red-600' : ''}`}>
+                        {format(day, 'd')}
+                      </span>
+                      {scheduleCount > 1 && (
+                        <span className="text-xs bg-blue-500 text-white rounded-full h-5 w-5 flex items-center justify-center">
+                          {scheduleCount}
                         </span>
-                      </div>
-
-                      {schedule && (
-                        <div className="mt-1">
-                          <div className="text-xs text-gray-500">
-                            {schedule.planned_hours}h
-                          </div>
-                        </div>
                       )}
                     </div>
-                  );
-                })}
+
+                    {plannedHours > 0 && (
+                      <div className="mt-1">
+                        <div className="text-xs text-gray-700">
+                          {plannedHours.toFixed(1)}h
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
               </div>
             </div>
           </div>
@@ -392,53 +495,76 @@ export default function SchedulePlanner() {
                 {selectedDate ? format(selectedDate, 'yyyy년 MM월 dd일', { locale: ko }) : '날짜를 선택하세요'}
               </h2>
 
-              {selectedDate && !isEditing && (
+              {selectedDate && !isEditing && !isAddingNew && (
                 <div>
-                  <div className="mb-4">
-                    <p className="text-gray-600">계획된 근무 시간</p>
-                    <p className="text-2xl font-bold">
-                      {selectedSchedule ? `${selectedSchedule.planned_hours}시간` : '계획 없음'}
-                    </p>
+                  <div className="mb-4 flex justify-between items-center">
+                    <h3 className="font-bold text-lg">이 날의 일정</h3>
+                    <button
+                      onClick={handleAddNewClick}
+                      className="bg-green-500 text-white px-3 py-1 text-sm rounded hover:bg-green-700"
+                    >
+                      + 새 일정
+                    </button>
                   </div>
                   
-                  {selectedSchedule && selectedSchedule.start_time && selectedSchedule.end_time && (
-                    <div className="mb-4">
-                      <p className="text-gray-600">근무 시간대</p>
-                      <p className="text-lg font-medium">
-                        {selectedSchedule.start_time.substring(0, 5)} ~ {selectedSchedule.end_time.substring(0, 5)}
-                      </p>
+                  {selectedDateSchedules.length === 0 ? (
+                    <p className="text-gray-500 mb-4">이 날은 계획된 근무 일정이 없습니다.</p>
+                  ) : (
+                    <div className="space-y-4 mb-6">
+                      {selectedDateSchedules.map((schedule) => (
+                        <div 
+                          key={schedule.id} 
+                          className={`p-3 border rounded-md ${selectedSchedule?.id === schedule.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
+                          onClick={() => {
+                            setSelectedSchedule(schedule);
+                            setStartTime(schedule.start_time || '09:00');
+                            setEndTime(schedule.end_time || '18:00');
+                            setPlannedHours(schedule.planned_hours);
+                            setDescription(schedule.description || '');
+                          }}
+                        >
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <p className="font-medium">{schedule.start_time.substring(0, 5)} ~ {schedule.end_time.substring(0, 5)}</p>
+                              <p className="text-sm text-gray-500">{schedule.planned_hours}시간</p>
+                            </div>
+                            <div className="flex space-x-2">
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleEditClick(schedule);
+                                }}
+                                className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded"
+                              >
+                                수정
+                              </button>
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedSchedule(schedule);
+                                  deleteScheduleHandler();
+                                }}
+                                className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded"
+                              >
+                                삭제
+                              </button>
+                            </div>
+                          </div>
+                          {schedule.description && (
+                            <p className="text-sm text-gray-600 mt-1">{schedule.description}</p>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   )}
-
-                  {selectedSchedule && selectedSchedule.description && (
-                    <div className="mb-4">
-                      <p className="text-gray-600">메모</p>
-                      <p className="text-lg">{selectedSchedule.description}</p>
-                    </div>
-                  )}
-
-                  <div className="flex space-x-2 mt-6">
-                    <button
-                      onClick={startEditing}
-                      className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-700"
-                    >
-                      {selectedSchedule ? '수정' : '계획 추가'}
-                    </button>
-                    
-                    {selectedSchedule && (
-                      <button 
-                        onClick={deleteScheduleHandler}
-                        className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-700"
-                      >
-                        삭제
-                      </button>
-                    )}
-                  </div>
                 </div>
               )}
               
-              {selectedDate && isEditing && (
+              {selectedDate && (isEditing || isAddingNew) && (
                 <div>
+                  <h3 className="font-bold text-lg mb-4">
+                    {isAddingNew ? '새 근무 일정 추가' : '근무 일정 수정'}
+                  </h3>
                   <div className="mb-4 grid grid-cols-2 gap-4">
                     <div>
                       <label htmlFor="startTime" className="block text-sm font-medium text-gray-700 mb-1">
@@ -496,10 +622,10 @@ export default function SchedulePlanner() {
                   
                   <div className="flex space-x-2 mt-6">
                     <button 
-                      onClick={saveSchedule}
+                      onClick={isAddingNew ? saveNewScheduleHandler : updateScheduleHandler}
                       className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-700"
                     >
-                      저장
+                      {isAddingNew ? '추가' : '수정'}
                     </button>
                     <button 
                       onClick={cancelEditing}

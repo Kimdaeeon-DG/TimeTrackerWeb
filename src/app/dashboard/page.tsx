@@ -331,7 +331,7 @@ export default function Dashboard() {
               <p className="text-2xl font-bold">{formatWorkingHours(Math.max(0, 100 - totalWorkingHours))}</p>
             </div>
             <div className="bg-purple-50 p-4 rounded-lg">
-              <p className="text-gray-600">오늘 계획 대비 진행률</p>
+              <p className="text-gray-600">오늘 계획 진행률</p>
               
               {todayPlannedHours > 0 ? (
                 <div>

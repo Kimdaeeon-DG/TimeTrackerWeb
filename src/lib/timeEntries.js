@@ -182,14 +182,14 @@ export async function getAllTimeEntries() {
 
 // ===== 근무 계획 관련 함수 =====
 
-// 특정 날짜의 근무 계획 가져오기
-export async function getWorkScheduleByDate(date) {
+// 특정 날짜의 모든 근무 계획 가져오기
+export async function getWorkSchedulesByDate(date) {
   // 현재 로그인한 사용자 정보 가져오기
   const { data: { user } } = await supabase.auth.getUser();
   
   if (!user) {
     console.error('사용자가 로그인되어 있지 않습니다.');
-    return null;
+    return [];
   }
   
   const { data, error } = await supabase
@@ -197,14 +197,20 @@ export async function getWorkScheduleByDate(date) {
     .select('*')
     .eq('date', date)
     .eq('user_id', user.id)
-    .single();
+    .order('created_at', { ascending: true });
   
-  if (error && error.code !== 'PGRST116') { // PGRST116는 결과가 없는 경우
-    console.error('Error fetching work schedule:', error);
-    return null;
+  if (error) {
+    console.error(`Error fetching work schedules for date ${date}:`, error);
+    return [];
   }
   
-  return data || null;
+  return data || [];
+}
+
+// 이전 버전과의 호환성을 위해 유지 (첫 번째 일정만 반환)
+export async function getWorkScheduleByDate(date) {
+  const schedules = await getWorkSchedulesByDate(date);
+  return schedules && schedules.length > 0 ? schedules[0] : null;
 }
 
 // 특정 기간의 근무 계획 가져오기
@@ -257,8 +263,8 @@ export async function getAllWorkSchedules() {
   return data || [];
 }
 
-// 근무 계획 생성 또는 업데이트
-export async function createOrUpdateWorkSchedule(date, startTime, endTime, plannedHours, description = '') {
+// 근무 계획 생성 (항상 새 계획 생성)
+export async function createWorkSchedule(date, startTime, endTime, plannedHours, description = '') {
   // 현재 로그인한 사용자 정보 가져오기
   const { data: { user } } = await supabase.auth.getUser();
   
@@ -267,57 +273,67 @@ export async function createOrUpdateWorkSchedule(date, startTime, endTime, plann
     return null;
   }
   
-  console.log('Creating/updating work schedule:', { date, startTime, endTime, plannedHours, description });
+  console.log('Creating work schedule:', { date, startTime, endTime, plannedHours, description });
   
-  // 먼저 해당 날짜에 기존 계획이 있는지 확인
-  const existingSchedule = await getWorkScheduleByDate(date);
-  
-  if (existingSchedule) {
-    // 기존 계획 업데이트
-    const { data, error } = await supabase
-      .from('work_schedules')
-      .update({ 
+  // 새 계획 생성
+  const { data, error } = await supabase
+    .from('work_schedules')
+    .insert([
+      { 
+        date,
         start_time: startTime,
         end_time: endTime,
         planned_hours: plannedHours,
         description: description,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', existingSchedule.id)
-      .eq('user_id', user.id)
-      .select();
-    
-    if (error) {
-      console.error('Error updating work schedule:', error);
-      return null;
-    }
-    
-    console.log('Updated work schedule:', data[0]);
-    return data[0];
-  } else {
-    // 새 계획 생성
-    const { data, error } = await supabase
-      .from('work_schedules')
-      .insert([
-        { 
-          date,
-          start_time: startTime,
-          end_time: endTime,
-          planned_hours: plannedHours,
-          description: description,
-          user_id: user.id
-        }
-      ])
-      .select();
-    
-    if (error) {
-      console.error('Error creating work schedule:', error);
-      return null;
-    }
-    
-    console.log('Created work schedule:', data[0]);
-    return data[0];
+        user_id: user.id
+      }
+    ])
+    .select();
+  
+  if (error) {
+    console.error('Error creating work schedule:', error);
+    return null;
   }
+  
+  console.log('Created work schedule:', data[0]);
+  return data[0];
+}
+
+// 근무 계획 업데이트
+export async function updateWorkSchedule(id, startTime, endTime, plannedHours, description = '') {
+  // 현재 로그인한 사용자 정보 가져오기
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    console.error('사용자가 로그인되어 있지 않습니다.');
+    return null;
+  }
+  
+  const { data, error } = await supabase
+    .from('work_schedules')
+    .update({ 
+      start_time: startTime,
+      end_time: endTime,
+      planned_hours: plannedHours,
+      description: description,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', id)
+    .eq('user_id', user.id)
+    .select();
+  
+  if (error) {
+    console.error('Error updating work schedule:', error);
+    return null;
+  }
+  
+  console.log('Updated work schedule:', data[0]);
+  return data[0];
+}
+
+// 이전 버전과의 호환성을 위해 유지
+export async function createOrUpdateWorkSchedule(date, startTime, endTime, plannedHours, description = '') {
+  return await createWorkSchedule(date, startTime, endTime, plannedHours, description);
 }
 
 // 근무 계획 삭제
