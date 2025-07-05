@@ -402,11 +402,6 @@ export default function SchedulePage() {
                       <span className="text-green-600 text-sm font-medium">
                         {formatWorkingHours(totalPlannedHoursForDate, true)}
                       </span>
-                      {schedulesForDate.length > 1 && (
-                        <span className="text-xs text-gray-500 ml-1">
-                          ({schedulesForDate.length}개)
-                        </span>
-                      )}
                     </div>
                   )}
                 </div>

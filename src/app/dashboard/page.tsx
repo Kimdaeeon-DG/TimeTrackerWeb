@@ -1,33 +1,9 @@
 "use client";
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import {
-  format,
-  startOfMonth,
-  endOfMonth,
-  eachDayOfInterval,
-  getDay,
-  addMonths,
-  subMonths,
-  parseISO,
-  differenceInHours,
-  differenceInMinutes,
-  isAfter,
-  isSameDay,
-  startOfDay,
-  endOfDay,
-} from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, parseISO, differenceInHours, differenceInMinutes, isAfter, isSameDay, addDays, startOfDay, endOfDay } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import {
-  getAllTimeEntries,
-  updateTimeEntry,
-  deleteTimeEntry,
-} from '../../lib/timeEntries';
-import {
-  getWorkSchedulesByMonth,
-  getWorkSchedulesByDate,
-} from '../../lib/workSchedules';
-import { toast } from 'react-hot-toast';
+import { getAllTimeEntries, updateTimeEntry, deleteTimeEntry } from '../../lib/timeEntries';
 
 interface TimeEntry {
   id: string;
@@ -37,23 +13,12 @@ interface TimeEntry {
   working_hours: number | null;
 }
 
-interface WorkSchedule {
-  id: string;
-  date: string;
-  start_time: string;
-  end_time: string;
-  planned_hours: number;
-}
-
 export default function Dashboard() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
-  const [workSchedules, setWorkSchedules] = useState<WorkSchedule[]>([]);
   const [totalWorkingHours, setTotalWorkingHours] = useState<number>(0);
-  const [totalPlannedHours, setTotalPlannedHours] = useState<number>(0);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedDateEntries, setSelectedDateEntries] = useState<TimeEntry[]>([]);
-  const [selectedDateSchedules, setSelectedDateSchedules] = useState<WorkSchedule[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   
@@ -77,22 +42,25 @@ export default function Dashboard() {
     }
   }, []);
 
-  // Supabase에서 근무 기록과 근무 계획 불러오기
+  // Supabase에서 근무 기록 불러오기
   useEffect(() => {
-    async function loadData() {
+    async function loadTimeEntries() {
       try {
         setIsLoading(true);
         setError(null);
         
-        // 근무 기록 불러오기
         const entries = await getAllTimeEntries();
         console.log('Loaded entries:', entries);
         setTimeEntries(entries || []);
         
-        // 총 근무 시간 계산
+        // 현재 월에 해당하는 기록만 필터링
+        const currentMonthStr = format(currentMonth, 'yyyy-MM');
+        const currentMonthEntries = entries ? entries.filter(entry => entry.date.startsWith(currentMonthStr)) : [];
+        
+        // 현재 월의 총 근무 시간 계산
         let totalHours = 0;
-        if (entries && entries.length > 0) {
-          entries.forEach((entry) => {
+        if (currentMonthEntries.length > 0) {
+          currentMonthEntries.forEach((entry) => {
             if (entry.working_hours) {
               totalHours += entry.working_hours;
             }
@@ -100,33 +68,19 @@ export default function Dashboard() {
         }
         setTotalWorkingHours(totalHours);
         
-        // 근무 계획 불러오기
-        const schedules = await getWorkSchedulesByMonth(
-          currentMonth.getFullYear(),
-          currentMonth.getMonth() + 1
-        );
-        setWorkSchedules(schedules || []);
-        
-        // 총 계획 근무 시간 계산
-        let totalPlannedHours = 0;
-        schedules.forEach((schedule) => {
-          totalPlannedHours += parseFloat(schedule.planned_hours.toString());
-        });
-        setTotalPlannedHours(totalPlannedHours);
-        
         setIsLoading(false);
       } catch (err: any) {
-        console.error('Error loading data:', err);
-        setError(`데이터를 불러오는 중 오류가 발생했습니다: ${err.message || String(err)}`);
+        console.error('Error loading time entries:', err);
+        setError(`근무 기록을 불러오는 중 오류가 발생했습니다: ${err.message || String(err)}`);
         setIsLoading(false);
       }
     }
     
     // 환경 변수가 있을 때만 데이터 로드
     if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-      loadData();
+      loadTimeEntries();
     }
-  }, []);
+  }, [currentMonth]);
   
   // 이전 달로 이동
   const prevMonth = () => {
@@ -149,11 +103,9 @@ export default function Dashboard() {
   // 달력의 첫 번째 날의 요일 (0: 일요일, 1: 월요일, ...)
   const startDay = getDay(monthStart);
   
-  // 날짜 선택 시 해당 날짜의 기록 및 계획 표시 (시간 순서대로 정렬)
-  const handleDateClick = async (date: string) => {
+  // 날짜 선택 시 해당 날짜의 기록 표시 (시간 순서대로 정렬)
+  const handleDateClick = (date: string) => {
     setSelectedDate(date);
-    
-    // 해당 날짜의 근무 기록 불러오기
     const entriesForDate = timeEntries.filter(entry => entry.date === date)
       .sort((a, b) => {
         // check_in 시간을 기준으로 오름차순 정렬
@@ -162,15 +114,6 @@ export default function Dashboard() {
         return timeA - timeB;
       });
     setSelectedDateEntries(entriesForDate);
-    
-    // 해당 날짜의 근무 계획 불러오기
-    try {
-      const schedulesForDate = await getWorkSchedulesByDate(date);
-      setSelectedDateSchedules(schedulesForDate);
-    } catch (err) {
-      console.error('Error fetching schedules for date:', err);
-      setSelectedDateSchedules([]);
-    }
   };
   
   // 근무 시간 포맷팅 함수
@@ -311,7 +254,7 @@ export default function Dashboard() {
       setIsLoading(false);
     }
   };
-
+  
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-6">
@@ -344,16 +287,12 @@ export default function Dashboard() {
       {!isLoading && !error && (
         <div className="bg-white shadow rounded-lg p-6 mb-6">
           <h2 className="text-xl font-semibold mb-4">근무 시간 요약</h2>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-blue-50 p-4 rounded-lg">
               <p className="text-gray-600">총 근무 시간</p>
               <p className="text-2xl font-bold">{formatWorkingHours(totalWorkingHours)}</p>
             </div>
             <div className="bg-green-50 p-4 rounded-lg">
-              <p className="text-gray-600">계획 근무 시간</p>
-              <p className="text-2xl font-bold text-green-600">{formatWorkingHours(totalPlannedHours)}</p>
-            </div>
-            <div className="bg-yellow-50 p-4 rounded-lg">
               <p className="text-gray-600">이번 달 근무 일수</p>
               <p className="text-2xl font-bold">{timeEntries.filter(entry => entry.date.startsWith(format(currentMonth, 'yyyy-MM'))).length > 0 ? Array.from(new Set(timeEntries.filter(entry => entry.date.startsWith(format(currentMonth, 'yyyy-MM'))).map(entry => entry.date))).length : 0}일</p>
             </div>
@@ -446,97 +385,82 @@ export default function Dashboard() {
               if (totalHours >= 8) {
                 bgColorClass = 'bg-green-100';
               } else if (totalHours >= 4) {
-                bgColorClass = 'bg-blue-50';
-              } else {
-                bgColorClass = 'bg-yellow-50';
+                bgColorClass = 'bg-yellow-100';
+              } else if (totalHours > 0) {
+                bgColorClass = 'bg-red-100';
               }
             }
             
-            // 해당 날짜의 계획된 근무 시간 찾기
-            const schedulesForDay = workSchedules.filter(schedule => schedule.date === dateStr);
-            let totalPlannedHoursForDay = 0;
-            
-            schedulesForDay.forEach(schedule => {
-              totalPlannedHoursForDay += parseFloat(schedule.planned_hours.toString());
-            });
-            
-            const hasSchedule = totalPlannedHoursForDay > 0;
-            
             return (
               <div 
-                key={dateStr}
-                className={`p-2 min-h-[80px] border ${isSelected ? 'border-blue-500' : 'border-gray-200'} ${bgColorClass}`}
+                key={dateStr} 
+                className={`p-2 min-h-[60px] border ${isSelected ? 'border-blue-500' : 'border-gray-200'} ${bgColorClass} cursor-pointer hover:bg-gray-50`}
                 onClick={() => handleDateClick(dateStr)}
               >
-                <div className="text-right mb-2">
-                  <span className={`${format(day, 'MM-dd') === format(new Date(), 'MM-dd') ? 'bg-blue-500 text-white rounded-full w-6 h-6 inline-block text-center' : ''}`}>
-                    {format(day, 'd')}
-                  </span>
+                <div className={`font-medium ${getDay(day) === 6 ? 'text-blue-600' : getDay(day) === 0 ? 'text-red-600' : ''}`}>
+                  {format(day, 'd')}
                 </div>
                 {hasRecord && (
-                  <div className="text-xs text-center">
-                    <span className="font-medium">{formatWorkingHours(totalHours, true)}</span>
-                  </div>
-                )}
-                {hasSchedule && (
-                  <div className="text-xs text-center mt-1">
-                    <span className="font-medium text-green-600">{formatWorkingHours(totalPlannedHoursForDay, true)}</span>
+                  <div className="text-xs mt-1 text-gray-600">
+                    {formatWorkingHours(totalHours, true)}
                   </div>
                 )}
               </div>
             );
           })}
+          </div>
         </div>
-      </div>
+      )}
       
-      {/* 선택한 날짜의 근무 기록 */}
-      {selectedDate && selectedDateEntries.length > 0 ? (
+      {/* 선택한 날짜의 출퇴근 기록 */}
+      {selectedDateEntries.length > 0 ? (
         <div className="bg-white shadow rounded-lg p-6 mb-6">
           <h2 className="text-xl font-semibold mb-4">
             {selectedDate ? format(parseISO(selectedDate), 'yyyy년 MM월 dd일') : format(new Date(), 'yyyy년 MM월 dd일')} 출퇴근 기록
           </h2>
-          <div className="space-y-2">
-            {selectedDateEntries.map((entry) => (
-              <div key={entry.id} className="relative border border-gray-200 rounded-lg overflow-hidden">
-                {editingEntry?.id === entry.id ? (
-                  // 수정 모드
-                  <div className="p-4 bg-blue-50">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">날짜</label>
-                        <input
-                          type="date"
-                          value={editDate}
+          <div className="overflow-hidden">
+            <div className="divide-y divide-gray-200">
+              {selectedDateEntries.map((entry) => (
+                <div key={entry.id} className="relative">
+                  {editingEntry?.id === entry.id ? (
+                    // 수정 모드
+                    <div className="p-4 bg-blue-50">
+                      <div className="mb-4">
+                        <label className="block text-xs font-medium text-gray-500 mb-1">날짜</label>
+                        <input 
+                          type="date" 
+                          value={editDate} 
                           onChange={(e) => setEditDate(e.target.value)}
-                          className="w-full p-2 border border-gray-300 rounded"
+                          className="border rounded px-2 py-1 w-full"
                         />
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">출근 시간</label>
-                        <input
-                          type="time"
-                          value={editCheckInTime}
-                          onChange={(e) => setEditCheckInTime(e.target.value)}
-                          className="w-full p-2 border border-gray-300 rounded"
-                        />
+                      <div className="grid grid-cols-2 gap-4 mb-4">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-500 mb-1">출근 시간</label>
+                          <input 
+                            type="time" 
+                            value={editCheckInTime} 
+                            onChange={(e) => setEditCheckInTime(e.target.value)}
+                            className="border rounded px-2 py-1 w-full"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-500 mb-1">퇴근 시간</label>
+                          <input 
+                            type="time" 
+                            value={editCheckOutTime} 
+                            onChange={(e) => setEditCheckOutTime(e.target.value)}
+                            className="border rounded px-2 py-1 w-full"
+                          />
+                        </div>
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">퇴근 시간</label>
-                        <input
-                          type="time"
-                          value={editCheckOutTime}
-                          onChange={(e) => setEditCheckOutTime(e.target.value)}
-                          className="w-full p-2 border border-gray-300 rounded"
-                        />
-                      </div>
-                    </div>
-                    <div className="flex justify-end space-x-2">
-                      <button 
-                        onClick={saveEditedEntry}
-                        className="bg-blue-500 text-white px-4 py-1 rounded text-sm"
-                      >
-                        저장
-                      </button>
+                      <div className="flex justify-end space-x-2">
+                        <button 
+                          onClick={saveEditedEntry}
+                          className="bg-green-500 text-white px-4 py-1 rounded text-sm"
+                        >
+                          저장
+                        </button>
                         <button 
                           onClick={cancelEditing}
                           className="bg-gray-500 text-white px-4 py-1 rounded text-sm"
