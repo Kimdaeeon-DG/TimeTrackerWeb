@@ -111,7 +111,9 @@ export default function SchedulePlanner() {
   const resetScheduleForm = () => {
     setStartTime('09:00');
     setEndTime('18:00');
-    setPlannedHours('');
+    // 직접 계산하여 plannedHours 설정 (빈 문자열로 남지 않게)
+    const hours = (18 - 9); // 기본값 09:00~18:00 = 9시간
+    setPlannedHours(hours);
     setDescription('');
   };
 
