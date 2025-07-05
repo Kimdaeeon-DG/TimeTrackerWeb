@@ -324,7 +324,7 @@ export default function SchedulePlanner() {
                 </button>
               </div>
 
-              <div className="grid grid-cols-7 gap-1">
+              <div className="grid grid-cols-7 gap-1 text-xs sm:text-sm">
                 {/* 요일 헤더 */}
                 {weekDays.map((day) => (
                   <div key={day} className="text-center font-semibold p-2">
@@ -359,7 +359,7 @@ export default function SchedulePlanner() {
                   return (
                     <div
                       key={dateStr}
-                      className={`h-24 p-1 border ${isSelected ? 'ring-2 ring-indigo-500' : ''} ${bgColorClass}`}
+                      className={`h-16 md:h-24 p-1 border ${isSelected ? 'ring-2 ring-indigo-500' : ''} ${bgColorClass}`}
                       onClick={() => handleDateClick(dateStr)}
                     >
                       <div className="flex justify-between">
@@ -369,21 +369,10 @@ export default function SchedulePlanner() {
                       </div>
 
                       {schedule && (
-                        <div className="mt-1">
-                          {/* 날짜 정보 표시 */}
-                          <div className="text-sm">
-                            {schedule.start_time && schedule.end_time && (
-                              <span className="block text-xs">
-                                {schedule.start_time.substring(0, 5)} ~ {schedule.end_time.substring(0, 5)}
-                              </span>
-                            )}
-                            {schedule.planned_hours}시간 계획됨
-                            {schedule.description && (
-                              <span className="block text-xs text-gray-500 truncate" title={schedule.description}>
-                                {schedule.description}
-                              </span>
-                            )}
-                          </div>
+                        <div className="mt-1 text-center">
+                          <span className="inline-block bg-blue-100 rounded-full px-2 py-1 text-xs font-semibold text-blue-800">
+                            {schedule.planned_hours}h
+                          </span>
                         </div>
                       )}
                     </div>
@@ -408,6 +397,15 @@ export default function SchedulePlanner() {
                       {selectedSchedule ? `${selectedSchedule.planned_hours}시간` : '계획 없음'}
                     </p>
                   </div>
+                  
+                  {selectedSchedule && selectedSchedule.start_time && selectedSchedule.end_time && (
+                    <div className="mb-4">
+                      <p className="text-gray-600">근무 시간대</p>
+                      <p className="text-lg font-medium">
+                        {selectedSchedule.start_time.substring(0, 5)} ~ {selectedSchedule.end_time.substring(0, 5)}
+                      </p>
+                    </div>
+                  )}
 
                   {selectedSchedule && selectedSchedule.description && (
                     <div className="mb-4">
