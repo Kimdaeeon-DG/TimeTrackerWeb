@@ -32,6 +32,9 @@ export default function SchedulePage() {
   // 근무 계획 복사 관련 상태
   const [isCopyingSchedule, setIsCopyingSchedule] = useState<boolean>(false);
   const [targetDate, setTargetDate] = useState<string>('');
+  
+  // 근무 계획 삭제 관련 상태
+  const [isDeletingSchedule, setIsDeletingSchedule] = useState<boolean>(false);
 
   // 환경 변수 확인
   useEffect(() => {
@@ -101,7 +104,7 @@ export default function SchedulePage() {
   // 달력의 첫 번째 날의 요일 (0: 일요일, 1: 월요일, ...)
   const startDay = getDay(monthStart);
   
-  // 날짜 선택 시 해당 날짜의 근무 계획 표시 또는 복사 대상으로 설정
+  // 날짜 선택 시 해당 날짜의 근무 계획 표시, 복사 또는 삭제 실행
   const handleDateClick = async (date: string) => {
     // 복사 모드인 경우 선택한 날짜를 복사 대상으로 설정
     if (isCopyingSchedule && selectedDate && selectedDate !== date) {
@@ -130,6 +133,45 @@ export default function SchedulePage() {
       } catch (err: any) {
         console.error('Error copying work schedules:', err);
         toast.error(err.message || '근무 계획 복사 중 오류가 발생했습니다.');
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
+    
+    // 삭제 모드인 경우 해당 날짜의 근무 계획 삭제
+    if (isDeletingSchedule && date) {
+      try {
+        setIsLoading(true);
+        
+        // 해당 날짜의 근무 계획 가져오기
+        const schedulesForDate = await getWorkSchedulesByDate(date);
+        
+        if (schedulesForDate.length === 0) {
+          toast.error(`${format(parseISO(date), 'yyyy년 MM월 dd일')}에는 삭제할 근무 계획이 없습니다.`);
+          setIsLoading(false);
+          return;
+        }
+        
+        // 모든 근무 계획 삭제
+        const deletePromises = schedulesForDate.map(schedule => deleteWorkSchedule(schedule.id));
+        await Promise.all(deletePromises);
+        
+        toast.success(`${format(parseISO(date), 'yyyy년 MM월 dd일')}의 근무 계획 ${schedulesForDate.length}개가 삭제되었습니다.`, {
+          duration: 2000
+        });
+        
+        // 데이터 다시 로드
+        const schedules = await getWorkSchedulesByMonth(
+          currentMonth.getFullYear(),
+          currentMonth.getMonth() + 1
+        );
+        setWorkSchedules(schedules || []);
+        
+        // 삭제 모드 유지 - 여러 날짜의 계획을 연속으로 삭제할 수 있도록 계속 유지
+      } catch (err: any) {
+        console.error('Error deleting work schedules:', err);
+        toast.error(err.message || '근무 계획 삭제 중 오류가 발생했습니다.');
       } finally {
         setIsLoading(false);
       }
@@ -353,6 +395,21 @@ export default function SchedulePage() {
     toast.success('복사 모드가 취소되었습니다.');
   };
   
+  // 근무 계획 삭제 모드 시작
+  const startDeletingSchedule = () => {
+    setIsDeletingSchedule(true);
+    toast.success('삭제 모드가 활성화되었습니다. 달력에서 삭제할 날짜를 선택하세요. 완료 후 삭제 모드 종료 버튼을 클릭하세요.', {
+      duration: 5000,
+      icon: '🗑️'
+    });
+  };
+  
+  // 근무 계획 삭제 모드 취소
+  const cancelDeletingSchedule = () => {
+    setIsDeletingSchedule(false);
+    toast.success('삭제 모드가 취소되었습니다.');
+  };
+  
   return (
     <div className="container mx-auto px-4 py-8">
       <Toaster position="top-right" />
@@ -381,14 +438,10 @@ export default function SchedulePage() {
       {!isLoading && !error && (
         <div className="bg-white shadow rounded-lg p-6 mb-6">
           <h2 className="text-xl font-semibold mb-4">근무 계획 요약</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
             <div className="bg-green-50 p-4 rounded-lg">
               <p className="text-gray-600">이번 달 계획 근무 시간</p>
               <p className="text-2xl font-bold text-green-600">{formatWorkingHours(totalPlannedHours)}</p>
-            </div>
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <p className="text-gray-600">이번 달 계획 근무 일수</p>
-              <p className="text-2xl font-bold">{Array.from(new Set(workSchedules.map(schedule => schedule.date))).length}일</p>
             </div>
           </div>
         </div>
@@ -450,7 +503,7 @@ export default function SchedulePage() {
               return (
                 <div 
                   key={dateStr} 
-                  className={`p-2 min-h-[60px] border ${isSelected ? 'border-blue-500' : isCopyingSchedule ? 'border-gray-200 hover:border-green-500' : 'border-gray-200'} cursor-pointer hover:bg-gray-50 ${isCopyingSchedule && selectedDate === dateStr ? 'bg-blue-50' : ''}`}
+                  className={`p-2 min-h-[60px] border ${isSelected ? 'border-blue-500' : isCopyingSchedule ? 'border-gray-200 hover:border-green-500' : isDeletingSchedule ? 'border-gray-200 hover:border-red-500' : 'border-gray-200'} cursor-pointer hover:bg-gray-50 ${isCopyingSchedule && selectedDate === dateStr ? 'bg-blue-50' : ''} ${isDeletingSchedule ? 'hover:bg-red-50' : ''}`}
                   onClick={() => handleDateClick(dateStr)}
                 >
                   <div className={`font-medium ${getDay(day) === 6 ? 'text-blue-600' : getDay(day) === 0 ? 'text-red-600' : ''}`}>
@@ -476,7 +529,7 @@ export default function SchedulePage() {
         <div className="bg-white shadow rounded-lg p-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-semibold">
-              {format(parseISO(selectedDate), 'yyyy년 MM월 dd일')}\n근무 계획
+              {format(parseISO(selectedDate), 'yyyy년 MM월 dd일')}<br />근무 계획
             </h2>
             <div className="flex space-x-2">
               <button 
@@ -484,6 +537,12 @@ export default function SchedulePage() {
                 className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600"
               >
                 계획 복사
+              </button>
+              <button 
+                onClick={startDeletingSchedule}
+                className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600"
+              >
+                계획 삭제
               </button>
               <button 
                 onClick={startAddingSchedule}
@@ -510,6 +569,26 @@ export default function SchedulePage() {
                 className="px-3 py-1 border border-red-300 text-red-600 rounded hover:bg-red-50"
               >
                 복사 모드 종료
+              </button>
+            </div>
+          )}
+          
+          {/* 삭제 모드 안내 */}
+          {isDeletingSchedule && (
+            <div className="bg-red-50 p-4 rounded-lg mb-4 flex justify-between items-center">
+              <div>
+                <h3 className="font-medium mb-1">
+                  근무 계획 삭제 모드
+                </h3>
+                <p className="text-sm text-gray-600">
+                  달력에서 삭제할 날짜를 선택하세요. 해당 날짜의 모든 근무 계획이 삭제됩니다.
+                </p>
+              </div>
+              <button
+                onClick={cancelDeletingSchedule}
+                className="px-3 py-1 border border-red-300 text-red-600 rounded hover:bg-red-50"
+              >
+                삭제 모드 종료
               </button>
             </div>
           )}
