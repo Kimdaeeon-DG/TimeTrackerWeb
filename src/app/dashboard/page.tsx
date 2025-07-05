@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, parseISO, differenceInHours, differenceInMinutes, isAfter, isSameDay, addDays, startOfDay, endOfDay } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { getAllTimeEntries, updateTimeEntry, deleteTimeEntry } from '../../lib/timeEntries';
+import { getWorkSchedulesByMonth } from '../../lib/workSchedules';
 
 interface TimeEntry {
   id: string;
@@ -13,9 +14,18 @@ interface TimeEntry {
   working_hours: number | null;
 }
 
+interface WorkSchedule {
+  id: string;
+  date: string;
+  start_time: string;
+  end_time: string;
+  planned_hours: number;
+}
+
 export default function Dashboard() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
+  const [workSchedules, setWorkSchedules] = useState<WorkSchedule[]>([]);
   const [totalWorkingHours, setTotalWorkingHours] = useState<number>(0);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedDateEntries, setSelectedDateEntries] = useState<TimeEntry[]>([]);
@@ -42,16 +52,25 @@ export default function Dashboard() {
     }
   }, []);
 
-  // Supabase에서 근무 기록 불러오기
+  // Supabase에서 근무 기록과 근무 계획 불러오기
   useEffect(() => {
-    async function loadTimeEntries() {
+    async function loadData() {
       try {
         setIsLoading(true);
         setError(null);
         
+        // 근무 기록 불러오기
         const entries = await getAllTimeEntries();
         console.log('Loaded entries:', entries);
         setTimeEntries(entries || []);
+        
+        // 근무 계획 불러오기
+        const schedules = await getWorkSchedulesByMonth(
+          currentMonth.getFullYear(),
+          currentMonth.getMonth() + 1
+        );
+        console.log('Loaded work schedules:', schedules);
+        setWorkSchedules(schedules || []);
         
         // 현재 월에 해당하는 기록만 필터링
         const currentMonthStr = format(currentMonth, 'yyyy-MM');
@@ -70,15 +89,15 @@ export default function Dashboard() {
         
         setIsLoading(false);
       } catch (err: any) {
-        console.error('Error loading time entries:', err);
-        setError(`근무 기록을 불러오는 중 오류가 발생했습니다: ${err.message || String(err)}`);
+        console.error('Error loading data:', err);
+        setError(`데이터를 불러오는 중 오류가 발생했습니다: ${err.message || String(err)}`);
         setIsLoading(false);
       }
     }
     
     // 환경 변수가 있을 때만 데이터 로드
     if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-      loadTimeEntries();
+      loadData();
     }
   }, [currentMonth]);
   
@@ -376,7 +395,17 @@ export default function Dashboard() {
               }
             });
             
+            // 해당 날짜의 근무 계획 찾기
+            const schedulesForDate = workSchedules.filter(schedule => schedule.date === dateStr);
+            
+            // 총 계획 시간 계산
+            let totalPlannedHours = 0;
+            schedulesForDate.forEach(schedule => {
+              totalPlannedHours += parseFloat(schedule.planned_hours.toString());
+            });
+            
             const hasRecord = totalHours > 0;
+            const hasSchedule = schedulesForDate.length > 0;
             const isSelected = selectedDate === dateStr;
             
             // 근무 시간에 따른 배경색 계산
@@ -400,9 +429,17 @@ export default function Dashboard() {
                 <div className={`font-medium ${getDay(day) === 6 ? 'text-blue-600' : getDay(day) === 0 ? 'text-red-600' : ''}`}>
                   {format(day, 'd')}
                 </div>
+                {/* 실제 근무 시간 표시 */}
                 {hasRecord && (
                   <div className="text-xs mt-1 text-gray-600">
                     {formatWorkingHours(totalHours, true)}
+                  </div>
+                )}
+                
+                {/* 근무 계획 표시 */}
+                {hasSchedule && (
+                  <div className="text-xs mt-1 text-green-600">
+                    계획: {formatWorkingHours(totalPlannedHours, true)}
                   </div>
                 )}
               </div>
