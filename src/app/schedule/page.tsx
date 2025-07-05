@@ -186,8 +186,14 @@ export default function SchedulePlanner() {
       setEndTime(selectedSchedule.end_time || '18:00');
       setPlannedHours(selectedSchedule.planned_hours);
       setDescription(selectedSchedule.description || '');
+      setIsEditing(false);
+    } else {
+      // 새 일정 추가 취소 시
+      resetScheduleForm();
     }
     setIsEditing(false);
+    setIsAddingNew(false); // 추가 모드도 취소
+    console.log('취소 버튼 클릭: isEditing=false, isAddingNew=false');
   };
   
   // 새 근무 계획 저장
@@ -197,21 +203,27 @@ export default function SchedulePlanner() {
     try {
       setIsLoading(true);
       setError(null);
+      
+      console.log('새 근무 계획 저장 시작:', format(selectedDate, 'yyyy-MM-dd'));
 
       // 새 근무 계획 저장
       const savedSchedule = await createWorkSchedule(
         format(selectedDate, 'yyyy-MM-dd'),
         startTime,
         endTime,
-        plannedHours,
+        Number(plannedHours), // 숫자로 변환 확인
         description
       );
 
       if (savedSchedule) {
+        console.log('일정 저장 성공:', savedSchedule);
+        
         // 선택한 날짜의 일정 다시 불러오기
         const updatedSchedules = await getWorkSchedulesByDate(format(selectedDate, 'yyyy-MM-dd'));
+        console.log('업데이트된 일정 목록:', updatedSchedules);
+        
         setSelectedDateSchedules(updatedSchedules || []);
-        setSelectedSchedule(savedSchedule);
+        setSelectedSchedule(null); // 선택된 일정 초기화
 
         // 전체 근무 계획 다시 불러오기
         const year = currentMonth.getFullYear();
@@ -219,8 +231,13 @@ export default function SchedulePlanner() {
         const schedules = await getWorkSchedulesByMonth(year, month);
         setWorkSchedules(schedules || []);
 
+        // 새 일정 추가를 위해 폼 초기화
+        resetScheduleForm();
         setIsAddingNew(false);
         toast.success('새 근무 일정이 추가되었습니다.');
+        
+        // 새 일정을 추가할 수 있도록 업데이트
+        console.log('추가 후 상태: isAddingNew=false, 새 추가 가능');
       }
     } catch (err: any) {
       console.error('Error saving new work schedule:', err);

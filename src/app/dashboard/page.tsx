@@ -356,7 +356,7 @@ export default function Dashboard() {
               href="/schedule" 
               className="inline-block bg-green-500 text-white px-4 py-2 rounded hover:bg-green-700"
             >
-              근무 계획 관리
+              근무 계획
             </Link>
           </div>
         </div>
