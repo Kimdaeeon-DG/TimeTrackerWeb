@@ -321,46 +321,82 @@ export default function Dashboard() {
             </div>
           </div>
           
-          {/* 근무 계획 대비 진행률 게이지바 */}
+          {/* 선택된 날짜 기준 근무 계획 대비 진행률 게이지바 */}
           <div className="mt-4">
             <div className="flex justify-between items-center mb-1">
-              <p className="text-gray-600">근무 계획 대비 진행률</p>
+              <p className="text-gray-600">계획 진행률 ({selectedDate ? format(selectedDate, 'yyyy-MM-dd') : ''} 기준)</p>
               <p className="text-sm font-medium">
                 {(() => {
-                  // 이번 달 근무 계획 총 시간 계산
+                  // 선택된 날짜까지의 근무 계획 총 시간 계산
+                  if (!selectedDate) return '0%';
+                  const selectedDateStr = format(selectedDate, 'yyyy-MM-dd');
                   const currentMonthStr = format(currentMonth, 'yyyy-MM');
-                  const currentMonthSchedules = workSchedules.filter(schedule => schedule.date.startsWith(currentMonthStr));
                   
-                  let totalPlannedHours = 0;
-                  currentMonthSchedules.forEach(schedule => {
-                    totalPlannedHours += parseFloat(schedule.planned_hours.toString());
+                  // 선택된 날짜까지의 계획된 근무 시간 계산
+                  const schedulesUntilSelectedDate = workSchedules.filter(schedule => {
+                    return schedule.date.startsWith(currentMonthStr) && schedule.date <= selectedDateStr;
+                  });
+                  
+                  let plannedHoursUntilSelectedDate = 0;
+                  schedulesUntilSelectedDate.forEach(schedule => {
+                    plannedHoursUntilSelectedDate += parseFloat(schedule.planned_hours.toString());
+                  });
+                  
+                  // 선택된 날짜까지의 실제 근무 시간 계산
+                  const entriesUntilSelectedDate = timeEntries.filter(entry => {
+                    return entry.date.startsWith(currentMonthStr) && entry.date <= selectedDateStr;
+                  });
+                  
+                  let actualHoursUntilSelectedDate = 0;
+                  entriesUntilSelectedDate.forEach(entry => {
+                    if (entry.working_hours !== null) {
+                      actualHoursUntilSelectedDate += parseFloat(entry.working_hours.toString());
+                    }
                   });
                   
                   // 계획이 없으면 0%
-                  if (totalPlannedHours === 0) return '0%';
+                  if (plannedHoursUntilSelectedDate === 0) return '0%';
                   
                   // 진행률 계산 (최대 100%)
-                  const progressPercent = Math.min(Math.round((totalWorkingHours / totalPlannedHours) * 100), 100);
-                  return `${progressPercent}% (${formatWorkingHours(totalWorkingHours)} / ${formatWorkingHours(totalPlannedHours)})`;
+                  const progressPercent = Math.min(Math.round((actualHoursUntilSelectedDate / plannedHoursUntilSelectedDate) * 100), 100);
+                  return `${progressPercent}% (${formatWorkingHours(actualHoursUntilSelectedDate)} / ${formatWorkingHours(plannedHoursUntilSelectedDate)})`;
                 })()}
               </p>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-2.5">
               {(() => {
-                // 이번 달 근무 계획 총 시간 계산
+                // 선택된 날짜까지의 근무 계획 총 시간 계산
+                if (!selectedDate) return <div className="w-0 h-2.5 rounded-full bg-blue-600"></div>;
+                const selectedDateStr = format(selectedDate, 'yyyy-MM-dd');
                 const currentMonthStr = format(currentMonth, 'yyyy-MM');
-                const currentMonthSchedules = workSchedules.filter(schedule => schedule.date.startsWith(currentMonthStr));
                 
-                let totalPlannedHours = 0;
-                currentMonthSchedules.forEach(schedule => {
-                  totalPlannedHours += parseFloat(schedule.planned_hours.toString());
+                // 선택된 날짜까지의 계획된 근무 시간 계산
+                const schedulesUntilSelectedDate = workSchedules.filter(schedule => {
+                  return schedule.date.startsWith(currentMonthStr) && schedule.date <= selectedDateStr;
+                });
+                
+                let plannedHoursUntilSelectedDate = 0;
+                schedulesUntilSelectedDate.forEach(schedule => {
+                  plannedHoursUntilSelectedDate += parseFloat(schedule.planned_hours.toString());
+                });
+                
+                // 선택된 날짜까지의 실제 근무 시간 계산
+                const entriesUntilSelectedDate = timeEntries.filter(entry => {
+                  return entry.date.startsWith(currentMonthStr) && entry.date <= selectedDateStr;
+                });
+                
+                let actualHoursUntilSelectedDate = 0;
+                entriesUntilSelectedDate.forEach(entry => {
+                  if (entry.working_hours !== null) {
+                    actualHoursUntilSelectedDate += parseFloat(entry.working_hours.toString());
+                  }
                 });
                 
                 // 계획이 없으면 0%
-                if (totalPlannedHours === 0) return <div className="w-0 h-2.5 rounded-full bg-blue-600"></div>;
+                if (plannedHoursUntilSelectedDate === 0) return <div className="w-0 h-2.5 rounded-full bg-blue-600"></div>;
                 
                 // 진행률 계산 (최대 100%)
-                const progressPercent = Math.min(Math.round((totalWorkingHours / totalPlannedHours) * 100), 100);
+                const progressPercent = Math.min(Math.round((actualHoursUntilSelectedDate / plannedHoursUntilSelectedDate) * 100), 100);
                 return <div className="h-2.5 rounded-full bg-blue-600" style={{ width: `${progressPercent}%` }}></div>;
               })()}
             </div>
