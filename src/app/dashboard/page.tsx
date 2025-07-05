@@ -15,10 +15,12 @@ interface TimeEntry {
 
 interface WorkSchedule {
   id: string;
-  date: string;
-  planned_hours: number;
-  description: string;
   user_id: string;
+  date: string;
+  start_time: string;
+  end_time: string;
+  planned_hours: number;
+  description: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -445,12 +447,17 @@ export default function Dashboard() {
                 <div className={`font-medium ${getDay(day) === 6 ? 'text-blue-600' : getDay(day) === 0 ? 'text-red-600' : ''}`}>
                   {format(day, 'd')}
                 </div>
-                {/* 계획된 근무 시간 표시 */}
-                {plannedHours > 0 && (
-                  <div className="mt-1 text-xs text-blue-600">
-                    계획: {plannedHours}시간
-                  </div>
-                )}
+                {/* 근무 계획 정보 표시 */}
+              {schedule && (
+                <div className="text-xs mt-1 text-blue-600">
+                  {schedule.start_time && schedule.end_time && (
+                    <div>
+                      {schedule.start_time.substring(0, 5)} ~ {schedule.end_time.substring(0, 5)}
+                    </div>
+                  )}
+                  계획: {schedule.planned_hours}시간
+                </div>
+              )}
                 {/* 실제 근무 시간 표시 */}
                 {totalHours > 0 && (
                   <div className="text-xs text-green-600">

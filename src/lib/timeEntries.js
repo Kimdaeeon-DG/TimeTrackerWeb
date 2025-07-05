@@ -258,7 +258,7 @@ export async function getAllWorkSchedules() {
 }
 
 // 근무 계획 생성 또는 업데이트
-export async function createOrUpdateWorkSchedule(date, plannedHours, description = '') {
+export async function createOrUpdateWorkSchedule(date, startTime, endTime, plannedHours, description = '') {
   // 현재 로그인한 사용자 정보 가져오기
   const { data: { user } } = await supabase.auth.getUser();
   
@@ -266,6 +266,8 @@ export async function createOrUpdateWorkSchedule(date, plannedHours, description
     console.error('사용자가 로그인되어 있지 않습니다.');
     return null;
   }
+  
+  console.log('Creating/updating work schedule:', { date, startTime, endTime, plannedHours, description });
   
   // 먼저 해당 날짜에 기존 계획이 있는지 확인
   const existingSchedule = await getWorkScheduleByDate(date);
@@ -275,6 +277,8 @@ export async function createOrUpdateWorkSchedule(date, plannedHours, description
     const { data, error } = await supabase
       .from('work_schedules')
       .update({ 
+        start_time: startTime,
+        end_time: endTime,
         planned_hours: plannedHours,
         description: description,
         updated_at: new Date().toISOString()
@@ -288,6 +292,7 @@ export async function createOrUpdateWorkSchedule(date, plannedHours, description
       return null;
     }
     
+    console.log('Updated work schedule:', data[0]);
     return data[0];
   } else {
     // 새 계획 생성
@@ -296,6 +301,8 @@ export async function createOrUpdateWorkSchedule(date, plannedHours, description
       .insert([
         { 
           date,
+          start_time: startTime,
+          end_time: endTime,
           planned_hours: plannedHours,
           description: description,
           user_id: user.id
@@ -308,6 +315,7 @@ export async function createOrUpdateWorkSchedule(date, plannedHours, description
       return null;
     }
     
+    console.log('Created work schedule:', data[0]);
     return data[0];
   }
 }

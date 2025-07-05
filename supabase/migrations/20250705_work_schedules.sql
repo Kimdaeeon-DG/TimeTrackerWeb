@@ -3,6 +3,8 @@ CREATE TABLE IF NOT EXISTS public.work_schedules (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     date DATE NOT NULL,
+    start_time TIME,
+    end_time TIME,
     planned_hours NUMERIC(5,2) NOT NULL,
     description TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
