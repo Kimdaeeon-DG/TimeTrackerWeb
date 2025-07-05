@@ -451,12 +451,12 @@ export default function Dashboard() {
                 <div className="flex flex-col items-center mt-1 space-y-1">
                   {schedule && (
                     <span className="inline-block bg-blue-100 rounded-full px-1 text-xs font-semibold text-blue-800">
-                      {schedule.planned_hours}h
+                      {schedule.planned_hours}시간
                     </span>
                   )}
                   {totalHours > 0 && (
                     <span className="inline-block bg-green-100 rounded-full px-1 text-xs font-semibold text-green-800">
-                      {totalHours.toFixed(1)}h
+                      {totalHours.toFixed(1)}시간
                     </span>
                   )}
                 </div>

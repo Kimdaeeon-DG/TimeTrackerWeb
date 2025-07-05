@@ -374,7 +374,7 @@ export default function SchedulePlanner() {
                       {schedule && (
                         <div className="mt-1 text-center">
                           <span className="inline-block bg-blue-100 rounded-full px-2 py-1 text-xs font-semibold text-blue-800">
-                            {schedule.planned_hours}h
+                            {schedule.planned_hours}시간
                           </span>
                         </div>
                       )}
