@@ -179,3 +179,190 @@ export async function getAllTimeEntries() {
     return [];
   }
 }
+
+// ===== 근무 계획 관련 함수 =====
+
+// 특정 날짜의 근무 계획 가져오기
+export async function getWorkScheduleByDate(date) {
+  // 현재 로그인한 사용자 정보 가져오기
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    console.error('사용자가 로그인되어 있지 않습니다.');
+    return null;
+  }
+  
+  const { data, error } = await supabase
+    .from('work_schedules')
+    .select('*')
+    .eq('date', date)
+    .eq('user_id', user.id)
+    .single();
+  
+  if (error && error.code !== 'PGRST116') { // PGRST116는 결과가 없는 경우
+    console.error('Error fetching work schedule:', error);
+    return null;
+  }
+  
+  return data || null;
+}
+
+// 특정 기간의 근무 계획 가져오기
+export async function getWorkSchedulesByDateRange(startDate, endDate) {
+  // 현재 로그인한 사용자 정보 가져오기
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    console.error('사용자가 로그인되어 있지 않습니다.');
+    return [];
+  }
+  
+  const { data, error } = await supabase
+    .from('work_schedules')
+    .select('*')
+    .eq('user_id', user.id)
+    .gte('date', startDate)
+    .lte('date', endDate)
+    .order('date', { ascending: true });
+  
+  if (error) {
+    console.error('Error fetching work schedules:', error);
+    return [];
+  }
+  
+  return data || [];
+}
+
+// 모든 근무 계획 가져오기
+export async function getAllWorkSchedules() {
+  // 현재 로그인한 사용자 정보 가져오기
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    console.error('사용자가 로그인되어 있지 않습니다.');
+    return [];
+  }
+  
+  const { data, error } = await supabase
+    .from('work_schedules')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('date', { ascending: false });
+  
+  if (error) {
+    console.error('Error fetching all work schedules:', error);
+    return [];
+  }
+  
+  return data || [];
+}
+
+// 근무 계획 생성 또는 업데이트
+export async function createOrUpdateWorkSchedule(date, plannedHours, description = '') {
+  // 현재 로그인한 사용자 정보 가져오기
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    console.error('사용자가 로그인되어 있지 않습니다.');
+    return null;
+  }
+  
+  // 먼저 해당 날짜에 기존 계획이 있는지 확인
+  const existingSchedule = await getWorkScheduleByDate(date);
+  
+  if (existingSchedule) {
+    // 기존 계획 업데이트
+    const { data, error } = await supabase
+      .from('work_schedules')
+      .update({ 
+        planned_hours: plannedHours,
+        description: description,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', existingSchedule.id)
+      .eq('user_id', user.id)
+      .select();
+    
+    if (error) {
+      console.error('Error updating work schedule:', error);
+      return null;
+    }
+    
+    return data[0];
+  } else {
+    // 새 계획 생성
+    const { data, error } = await supabase
+      .from('work_schedules')
+      .insert([
+        { 
+          date,
+          planned_hours: plannedHours,
+          description: description,
+          user_id: user.id
+        }
+      ])
+      .select();
+    
+    if (error) {
+      console.error('Error creating work schedule:', error);
+      return null;
+    }
+    
+    return data[0];
+  }
+}
+
+// 근무 계획 삭제
+export async function deleteWorkSchedule(id) {
+  // 현재 로그인한 사용자 정보 가져오기
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    console.error('사용자가 로그인되어 있지 않습니다.');
+    return false;
+  }
+  
+  const { error } = await supabase
+    .from('work_schedules')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', user.id);
+  
+  if (error) {
+    console.error('Error deleting work schedule:', error);
+    return false;
+  }
+  
+  return true;
+}
+
+// 특정 월의 근무 계획 가져오기
+export async function getWorkSchedulesByMonth(year, month) {
+  // 현재 로그인한 사용자 정보 가져오기
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    console.error('사용자가 로그인되어 있지 않습니다.');
+    return [];
+  }
+  
+  // 해당 월의 시작일과 종료일 계산
+  const startDate = `${year}-${month.toString().padStart(2, '0')}-01`;
+  const lastDay = new Date(year, month, 0).getDate(); // 해당 월의 마지막 날짜
+  const endDate = `${year}-${month.toString().padStart(2, '0')}-${lastDay}`;
+  
+  const { data, error } = await supabase
+    .from('work_schedules')
+    .select('*')
+    .eq('user_id', user.id)
+    .gte('date', startDate)
+    .lte('date', endDate)
+    .order('date', { ascending: true });
+  
+  if (error) {
+    console.error('Error fetching work schedules for month:', error);
+    return [];
+  }
+  
+  return data || [];
+}
