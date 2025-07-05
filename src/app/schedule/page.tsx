@@ -79,11 +79,12 @@ export default function SchedulePlanner() {
   // 달력의 첫 번째 날의 요일 (0: 일요일, 1: 월요일, ...)
   const startDay = getDay(monthStart);
 
-  // 선택한 날짜의 근무 계획 정보 가져오기
+  // 선택한 날짜의 근무 
   const fetchSelectedDateSchedules = useCallback(async (date: Date) => {
     try {
       const schedules = await getWorkSchedulesByDate(format(date, 'yyyy-MM-dd'));
       setSelectedDateSchedules(schedules || []);
+      console.log('가져온 일정 개수:', schedules?.length || 0);
       
       if (schedules && schedules.length > 0) {
         // 기본적으로 첫 번째 스케줄 선택
@@ -93,10 +94,13 @@ export default function SchedulePlanner() {
         setEndTime(firstSchedule.end_time || '18:00');
         setPlannedHours(firstSchedule.planned_hours);
         setDescription(firstSchedule.description || '');
+        setIsAddingNew(false); // 일정이 있을 때는 추가 모드가 아님
       } else {
         // 스케줄이 없는 경우
         resetScheduleForm();
         setSelectedSchedule(null);
+        // 일정이 없는 경우에도 추가 모드는 비활성화
+        setIsAddingNew(false); 
       }
     } catch (error) {
       console.error('Error fetching schedules for selected date:', error);
@@ -177,6 +181,7 @@ export default function SchedulePlanner() {
     setIsAddingNew(true);
     setIsEditing(false);
     setSelectedSchedule(null);
+    console.log('새 일정 추가 모드 시작: isAddingNew=true, isEditing=false');
   };
 
   // 근무 계획 수정 취소
@@ -223,7 +228,6 @@ export default function SchedulePlanner() {
         console.log('업데이트된 일정 목록:', updatedSchedules);
         
         setSelectedDateSchedules(updatedSchedules || []);
-        setSelectedSchedule(null); // 선택된 일정 초기화
 
         // 전체 근무 계획 다시 불러오기
         const year = currentMonth.getFullYear();
@@ -231,13 +235,14 @@ export default function SchedulePlanner() {
         const schedules = await getWorkSchedulesByMonth(year, month);
         setWorkSchedules(schedules || []);
 
-        // 새 일정 추가를 위해 폼 초기화
-        resetScheduleForm();
+        // 이미 추가한 것을 보여주기 위해 일정 폼 모드 비활성화
         setIsAddingNew(false);
+        setSelectedSchedule(null);
+        resetScheduleForm();
         toast.success('새 근무 일정이 추가되었습니다.');
         
-        // 새 일정을 추가할 수 있도록 업데이트
-        console.log('추가 후 상태: isAddingNew=false, 새 추가 가능');
+        // 추가 후 바로 새 일정을 추가할 수 있도록 UI 상태 업데이트
+        console.log('추가 후 상태: isAddingNew=false, 선택된 일정 없음, 새 추가 가능');
       }
     } catch (err: any) {
       console.error('Error saving new work schedule:', err);
@@ -524,6 +529,7 @@ export default function SchedulePlanner() {
                     </button>
                   </div>
                   
+                  {/* 일정 목록 또는 없음 메시지 */}
                   {selectedDateSchedules.length === 0 ? (
                     <p className="text-gray-500 mb-4">이 날은 계획된 근무 일정이 없습니다.</p>
                   ) : (
@@ -533,6 +539,9 @@ export default function SchedulePlanner() {
                           key={schedule.id} 
                           className={`p-3 border rounded-md ${selectedSchedule?.id === schedule.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
                           onClick={() => {
+                            // 일정 추가 모드에서 일정 선택 시 추가 모드 비활성화
+                            setIsAddingNew(false); 
+                            setIsEditing(false);
                             setSelectedSchedule(schedule);
                             setStartTime(schedule.start_time || '09:00');
                             setEndTime(schedule.end_time || '18:00');
