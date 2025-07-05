@@ -101,8 +101,45 @@ export default function SchedulePage() {
   // 달력의 첫 번째 날의 요일 (0: 일요일, 1: 월요일, ...)
   const startDay = getDay(monthStart);
   
-  // 날짜 선택 시 해당 날짜의 근무 계획 표시
+  // 날짜 선택 시 해당 날짜의 근무 계획 표시 또는 복사 대상으로 설정
   const handleDateClick = async (date: string) => {
+    // 복사 모드인 경우 선택한 날짜를 복사 대상으로 설정
+    if (isCopyingSchedule && selectedDate && selectedDate !== date) {
+      try {
+        setIsLoading(true);
+        
+        const result = await copyWorkSchedulesToDate(selectedDateSchedules, date);
+        
+        if (result.success) {
+          toast.success(`근무 계획이 ${format(parseISO(date), 'yyyy년 MM월 dd일')}에 복사되었습니다.`);
+          
+          // 데이터 다시 로드
+          const schedules = await getWorkSchedulesByMonth(
+            currentMonth.getFullYear(),
+            currentMonth.getMonth() + 1
+          );
+          setWorkSchedules(schedules || []);
+          
+          // 복사 모드 종료
+          setIsCopyingSchedule(false);
+          
+          // 새로 선택한 날짜의 근무 계획 표시
+          setSelectedDate(date);
+          const schedulesForDate = await getWorkSchedulesByDate(date);
+          setSelectedDateSchedules(schedulesForDate);
+        } else {
+          toast.error(result.message || '근무 계획 복사 중 오류가 발생했습니다.');
+        }
+      } catch (err: any) {
+        console.error('Error copying work schedules:', err);
+        toast.error(err.message || '근무 계획 복사 중 오류가 발생했습니다.');
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
+    
+    // 일반 모드인 경우 해당 날짜의 근무 계획 표시
     setSelectedDate(date);
     
     try {
@@ -307,49 +344,16 @@ export default function SchedulePage() {
     }
     
     setIsCopyingSchedule(true);
-    // 기본값으로 내일 날짜 설정
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    setTargetDate(format(tomorrow, 'yyyy-MM-dd'));
+    toast.success('복사 모드가 활성화되었습니다. 달력에서 대상 날짜를 선택하세요.', {
+      duration: 4000,
+      icon: '🔄'
+    });
   };
   
-  // 근무 계획 복사 실행
-  const copySchedules = async () => {
-    if (!selectedDate || !targetDate) {
-      toast.error('모든 필드를 입력해주세요.');
-      return;
-    }
-    
-    if (selectedDate === targetDate) {
-      toast.error('동일한 날짜에는 복사할 수 없습니다.');
-      return;
-    }
-    
-    try {
-      setIsLoading(true);
-      
-      const result = await copyWorkSchedulesToDate(selectedDateSchedules, targetDate);
-      
-      if (result.success) {
-        toast.success(`근무 계획이 ${format(parseISO(targetDate), 'yyyy년 MM월 dd일')}에 복사되었습니다.`);
-        
-        // 데이터 다시 로드
-        const schedules = await getWorkSchedulesByMonth(
-          currentMonth.getFullYear(),
-          currentMonth.getMonth() + 1
-        );
-        setWorkSchedules(schedules || []);
-        
-        resetScheduleForm();
-      } else {
-        toast.error(result.message || '근무 계획 복사 중 오류가 발생했습니다.');
-      }
-    } catch (err: any) {
-      console.error('Error copying work schedules:', err);
-      toast.error(err.message || '근무 계획 복사 중 오류가 발생했습니다.');
-    } finally {
-      setIsLoading(false);
-    }
+  // 근무 계획 복사 모드 취소
+  const cancelCopyingSchedule = () => {
+    setIsCopyingSchedule(false);
+    toast.success('복사 모드가 취소되었습니다.');
   };
   
   return (
@@ -449,7 +453,7 @@ export default function SchedulePage() {
               return (
                 <div 
                   key={dateStr} 
-                  className={`p-2 min-h-[60px] border ${isSelected ? 'border-blue-500' : 'border-gray-200'} cursor-pointer hover:bg-gray-50`}
+                  className={`p-2 min-h-[60px] border ${isSelected ? 'border-blue-500' : isCopyingSchedule ? 'border-gray-200 hover:border-green-500' : 'border-gray-200'} cursor-pointer hover:bg-gray-50 ${isCopyingSchedule && selectedDate === dateStr ? 'bg-blue-50' : ''}`}
                   onClick={() => handleDateClick(dateStr)}
                 >
                   <div className={`font-medium ${getDay(day) === 6 ? 'text-blue-600' : getDay(day) === 0 ? 'text-red-600' : ''}`}>
@@ -493,41 +497,23 @@ export default function SchedulePage() {
             </div>
           </div>
           
-          {/* 근무 계획 복사 폼 */}
+          {/* 복사 모드 안내 */}
           {isCopyingSchedule && (
-            <div className="bg-gray-50 p-4 rounded-lg mb-4">
-              <h3 className="font-medium mb-3">
-                근무 계획 복사
-              </h3>
-              <div className="grid grid-cols-1 gap-4 mb-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">대상 날짜</label>
-                  <input
-                    type="date"
-                    value={targetDate}
-                    onChange={(e) => setTargetDate(e.target.value)}
-                    className="w-full p-2 border rounded"
-                    min={format(new Date(), 'yyyy-MM-dd')}
-                  />
-                </div>
-                <div className="text-sm text-gray-600">
-                  <p>선택한 날짜({format(parseISO(selectedDate), 'yyyy년 MM월 dd일')})의 근무 계획 {selectedDateSchedules.length}개가 대상 날짜에 복사됩니다.</p>
-                </div>
+            <div className="bg-blue-50 p-4 rounded-lg mb-4 flex justify-between items-center">
+              <div>
+                <h3 className="font-medium mb-1">
+                  근무 계획 복사 모드
+                </h3>
+                <p className="text-sm text-gray-600">
+                  {format(parseISO(selectedDate!), 'yyyy년 MM월 dd일')}의 근무 계획 {selectedDateSchedules.length}개를 복사할 대상 날짜를 달력에서 선택하세요.
+                </p>
               </div>
-              <div className="flex justify-end space-x-2">
-                <button
-                  onClick={resetScheduleForm}
-                  className="px-3 py-1 border rounded hover:bg-gray-100"
-                >
-                  취소
-                </button>
-                <button
-                  onClick={copySchedules}
-                  className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
-                >
-                  복사
-                </button>
-              </div>
+              <button
+                onClick={cancelCopyingSchedule}
+                className="px-3 py-1 border border-red-300 text-red-600 rounded hover:bg-red-50"
+              >
+                복사 취소
+              </button>
             </div>
           )}
           
