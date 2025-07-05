@@ -111,7 +111,9 @@ export default function SchedulePage() {
         const result = await copyWorkSchedulesToDate(selectedDateSchedules, date);
         
         if (result.success) {
-          toast.success(`근무 계획이 ${format(parseISO(date), 'yyyy년 MM월 dd일')}에 복사되었습니다.`);
+          toast.success(`근무 계획이 ${format(parseISO(date), 'yyyy년 MM월 dd일')}에 복사되었습니다.`, {
+            duration: 2000
+          });
           
           // 데이터 다시 로드
           const schedules = await getWorkSchedulesByMonth(
@@ -120,13 +122,8 @@ export default function SchedulePage() {
           );
           setWorkSchedules(schedules || []);
           
-          // 복사 모드 종료
-          setIsCopyingSchedule(false);
-          
-          // 새로 선택한 날짜의 근무 계획 표시
-          setSelectedDate(date);
-          const schedulesForDate = await getWorkSchedulesByDate(date);
-          setSelectedDateSchedules(schedulesForDate);
+          // 복사 모드 유지 - 여러 날짜에 연속으로 복사할 수 있도록 계속 유지
+          // 복사 완료 후 원본 날짜의 계획을 계속 복사할 수 있도록 선택한 날짜를 변경하지 않음
         } else {
           toast.error(result.message || '근무 계획 복사 중 오류가 발생했습니다.');
         }
@@ -344,8 +341,8 @@ export default function SchedulePage() {
     }
     
     setIsCopyingSchedule(true);
-    toast.success('복사 모드가 활성화되었습니다. 달력에서 대상 날짜를 선택하세요.', {
-      duration: 4000,
+    toast.success('복사 모드가 활성화되었습니다. 달력에서 여러 대상 날짜를 선택하세요. 완료 후 복사 취소 버튼을 클릭하세요.', {
+      duration: 5000,
       icon: '🔄'
     });
   };
@@ -479,7 +476,7 @@ export default function SchedulePage() {
         <div className="bg-white shadow rounded-lg p-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-semibold">
-              {format(parseISO(selectedDate), 'yyyy년 MM월 dd일')} 근무 계획
+              {format(parseISO(selectedDate), 'yyyy년 MM월 dd일')}\n근무 계획
             </h2>
             <div className="flex space-x-2">
               <button 
@@ -505,14 +502,14 @@ export default function SchedulePage() {
                   근무 계획 복사 모드
                 </h3>
                 <p className="text-sm text-gray-600">
-                  {format(parseISO(selectedDate!), 'yyyy년 MM월 dd일')}의 근무 계획 {selectedDateSchedules.length}개를 복사할 대상 날짜를 달력에서 선택하세요.
+                  {format(parseISO(selectedDate!), 'yyyy년 MM월 dd일')}의 근무 계획 {selectedDateSchedules.length}개를 여러 날짜에 복사할 수 있습니다. 달력에서 대상 날짜를 선택하세요.
                 </p>
               </div>
               <button
                 onClick={cancelCopyingSchedule}
                 className="px-3 py-1 border border-red-300 text-red-600 rounded hover:bg-red-50"
               >
-                복사 취소
+                복사 모드 종료
               </button>
             </div>
           )}
