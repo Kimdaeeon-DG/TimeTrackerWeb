@@ -669,6 +669,5 @@ export default function SchedulePlanner() {
         </div>
       </div>
     </div>
-  </div>
   );
 }
