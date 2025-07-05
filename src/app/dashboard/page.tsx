@@ -448,16 +448,16 @@ export default function Dashboard() {
                   {format(day, 'd')}
                 </div>
                 {/* 근무 계획 및 실제 근무 정보를 간소화하여 표시 */}
-                <div className="flex flex-col items-center mt-1 space-y-1">
-                  {schedule && (
-                    <span className="inline-block bg-blue-100 rounded-full px-1 text-xs font-semibold text-blue-800">
-                      {schedule.planned_hours}시간
-                    </span>
-                  )}
+                <div className="flex flex-col mt-1">
                   {totalHours > 0 && (
-                    <span className="inline-block bg-green-100 rounded-full px-1 text-xs font-semibold text-green-800">
-                      {totalHours.toFixed(1)}시간
-                    </span>
+                    <div className="text-xs text-gray-500">
+                      {totalHours.toFixed(1)}h
+                    </div>
+                  )}
+                  {schedule && (
+                    <div className="text-xs text-green-600">
+                      {schedule.planned_hours}h
+                    </div>
                   )}
                 </div>
               </div>
