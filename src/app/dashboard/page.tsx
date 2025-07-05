@@ -31,6 +31,7 @@ export default function Dashboard() {
   const [workSchedules, setWorkSchedules] = useState<WorkSchedule[]>([]);
   const [totalWorkingHours, setTotalWorkingHours] = useState<number>(0);
   const [totalPlannedHours, setTotalPlannedHours] = useState<number>(0);
+  const [todayPlannedHours, setTodayPlannedHours] = useState<number>(0);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedDateEntries, setSelectedDateEntries] = useState<TimeEntry[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -94,6 +95,12 @@ export default function Dashboard() {
           return total + schedule.planned_hours;
         }, 0);
         setTotalPlannedHours(totalPlanned);
+        
+        // 오늘 계획된 근무 시간 가져오기
+        const todayStr = format(new Date(), 'yyyy-MM-dd');
+        const todaySchedule = schedules.find(s => s.date === todayStr);
+        const todayPlannedHours = todaySchedule ? todaySchedule.planned_hours : 0;
+        setTodayPlannedHours(todayPlannedHours);
         
         setIsLoading(false);
       } catch (err: any) {
@@ -314,26 +321,33 @@ export default function Dashboard() {
       {!isLoading && !error && (
         <div className="bg-white shadow rounded-lg p-6 mb-6">
           <h2 className="text-xl font-semibold mb-4">근무 시간 요약</h2>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-blue-50 p-4 rounded-lg">
               <p className="text-gray-600">총 근무 시간</p>
               <p className="text-2xl font-bold">{formatWorkingHours(totalWorkingHours)}</p>
             </div>
             <div className="bg-green-50 p-4 rounded-lg">
-              <p className="text-gray-600">이번 달 근무 일수</p>
-              <p className="text-2xl font-bold">{timeEntries.filter(entry => entry.date.startsWith(format(currentMonth, 'yyyy-MM'))).length > 0 ? Array.from(new Set(timeEntries.filter(entry => entry.date.startsWith(format(currentMonth, 'yyyy-MM'))).map(entry => entry.date))).length : 0}일</p>
-            </div>
-            <div className="bg-yellow-50 p-4 rounded-lg">
-              <p className="text-gray-600">계획된 근무 시간</p>
-              <p className="text-2xl font-bold">{formatWorkingHours(totalPlannedHours)}</p>
+              <p className="text-gray-600">100시간 기준 남은 시간</p>
+              <p className="text-2xl font-bold">{formatWorkingHours(Math.max(0, 100 - totalWorkingHours))}</p>
             </div>
             <div className="bg-purple-50 p-4 rounded-lg">
-              <p className="text-gray-600">계획 대비 진행률</p>
-              <p className="text-2xl font-bold">
-                {totalPlannedHours > 0 
-                  ? `${Math.round((totalWorkingHours / totalPlannedHours) * 100)}%`
-                  : '0%'}
-              </p>
+              <p className="text-gray-600">오늘 계획 대비 진행률</p>
+              
+              {todayPlannedHours > 0 ? (
+                <div>
+                  <p className="text-lg font-bold mb-1">
+                    {Math.min(100, Math.round((totalWorkingHours / todayPlannedHours) * 100))}%
+                  </p>
+                  <div className="w-full bg-gray-200 rounded-full h-2.5">
+                    <div 
+                      className="bg-blue-600 h-2.5 rounded-full" 
+                      style={{ width: `${Math.min(100, Math.round((totalWorkingHours / todayPlannedHours) * 100))}%` }}
+                    ></div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-lg font-bold">오늘 계획이 없습니다</p>
+              )}
             </div>
           </div>
           
