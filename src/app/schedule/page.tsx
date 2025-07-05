@@ -86,11 +86,13 @@ export default function SchedulePlanner() {
         setEndTime(schedule.end_time || '18:00');
         setPlannedHours(schedule.planned_hours);
         setDescription(schedule.description || '');
+        setSelectedSchedule(schedule); // 선택된 스케줄 상태 설정
       } else {
         setStartTime('09:00');
         setEndTime('18:00');
         setPlannedHours('');
         setDescription('');
+        setSelectedSchedule(null); // 스케줄이 없는 경우 null로 설정
       }
     } catch (error) {
       console.error('Error fetching schedule for selected date:', error);
@@ -100,6 +102,7 @@ export default function SchedulePlanner() {
   // 날짜 선택 시 해당 날짜의 근무 계획 표시
   const handleDateClick = async (date: string) => {
     setSelectedDate(parseISO(date));
+    setIsEditing(false); // 날짜 선택 시 편집 모드 해제
 
     try {
       setIsLoading(true);

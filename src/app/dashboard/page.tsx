@@ -369,7 +369,7 @@ export default function Dashboard() {
             </button>
           </div>
         
-          <div className="grid grid-cols-7 gap-1">
+          <div className="grid grid-cols-7 gap-1 text-xs sm:text-sm">
             {/* 요일 헤더 */}
           {weekDays.map((day) => (
             <div key={day} className="text-center font-semibold p-2">
@@ -441,34 +441,25 @@ export default function Dashboard() {
             return (
               <div 
                 key={dateStr} 
-                className={`p-2 min-h-[60px] border ${isSelected ? 'border-blue-500' : 'border-gray-200'} ${bgColorClass} cursor-pointer hover:bg-gray-50`}
+                className={`p-1 min-h-[50px] md:min-h-[60px] border ${isSelected ? 'border-blue-500' : 'border-gray-200'} ${bgColorClass} cursor-pointer hover:bg-gray-50`}
                 onClick={() => handleDateClick(dateStr)}
               >
                 <div className={`font-medium ${getDay(day) === 6 ? 'text-blue-600' : getDay(day) === 0 ? 'text-red-600' : ''}`}>
                   {format(day, 'd')}
                 </div>
-                {/* 근무 계획 정보 표시 */}
-              {schedule && (
-                <div className="text-xs mt-1 text-blue-600">
-                  {schedule.start_time && schedule.end_time && (
-                    <div>
-                      {schedule.start_time.substring(0, 5)} ~ {schedule.end_time.substring(0, 5)}
-                    </div>
+                {/* 근무 계획 및 실제 근무 정보를 간소화하여 표시 */}
+                <div className="flex flex-col items-center mt-1 space-y-1">
+                  {schedule && (
+                    <span className="inline-block bg-blue-100 rounded-full px-1 text-xs font-semibold text-blue-800">
+                      {schedule.planned_hours}h
+                    </span>
                   )}
-                  계획: {schedule.planned_hours}시간
+                  {totalHours > 0 && (
+                    <span className="inline-block bg-green-100 rounded-full px-1 text-xs font-semibold text-green-800">
+                      {totalHours.toFixed(1)}h
+                    </span>
+                  )}
                 </div>
-              )}
-                {/* 실제 근무 시간 표시 */}
-                {totalHours > 0 && (
-                  <div className="text-xs text-green-600">
-                    실제: {totalHours.toFixed(1)}시간
-                  </div>
-                )}
-                {hasRecord && (
-                  <div className="text-xs mt-1 text-gray-600">
-                    {formatWorkingHours(totalHours, true)}
-                  </div>
-                )}
               </div>
             );
           })}
