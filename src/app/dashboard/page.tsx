@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, parseISO, differenceInHours, differenceInMinutes, isAfter, isSameDay, addDays, startOfDay, endOfDay } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import { getAllTimeEntries, updateTimeEntry, deleteTimeEntry, getWorkSchedulesByMonth } from '../../lib/timeEntries';
+import { getAllTimeEntries, updateTimeEntry, deleteTimeEntry } from '../../lib/timeEntries';
 
 interface TimeEntry {
   id: string;
@@ -13,25 +13,10 @@ interface TimeEntry {
   working_hours: number | null;
 }
 
-interface WorkSchedule {
-  id: string;
-  user_id: string;
-  date: string;
-  start_time: string;
-  end_time: string;
-  planned_hours: number;
-  description: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
 export default function Dashboard() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
-  const [workSchedules, setWorkSchedules] = useState<WorkSchedule[]>([]);
   const [totalWorkingHours, setTotalWorkingHours] = useState<number>(0);
-  const [totalPlannedHours, setTotalPlannedHours] = useState<number>(0);
-  const [todayPlannedHours, setTodayPlannedHours] = useState<number>(0);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedDateEntries, setSelectedDateEntries] = useState<TimeEntry[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -57,14 +42,13 @@ export default function Dashboard() {
     }
   }, []);
 
-  // Supabase에서 근무 기록과 계획 불러오기
+  // Supabase에서 근무 기록 불러오기
   useEffect(() => {
-    async function loadData() {
+    async function loadTimeEntries() {
       try {
         setIsLoading(true);
         setError(null);
         
-        // 근무 기록 불러오기
         const entries = await getAllTimeEntries();
         console.log('Loaded entries:', entries);
         setTimeEntries(entries || []);
@@ -84,35 +68,17 @@ export default function Dashboard() {
         }
         setTotalWorkingHours(totalHours);
         
-        // 근무 계획 불러오기
-        const year = currentMonth.getFullYear();
-        const month = currentMonth.getMonth() + 1; // JavaScript의 월은 0부터 시작
-        const schedules = await getWorkSchedulesByMonth(year, month);
-        setWorkSchedules(schedules || []);
-        
-        // 총 계획 근무 시간 계산
-        const totalPlanned = schedules.reduce((total, schedule) => {
-          return total + schedule.planned_hours;
-        }, 0);
-        setTotalPlannedHours(totalPlanned);
-        
-        // 오늘 계획된 근무 시간 가져오기
-        const todayStr = format(new Date(), 'yyyy-MM-dd');
-        const todaySchedule = schedules.find(s => s.date === todayStr);
-        const todayPlannedHours = todaySchedule ? todaySchedule.planned_hours : 0;
-        setTodayPlannedHours(todayPlannedHours);
-        
         setIsLoading(false);
       } catch (err: any) {
-        console.error('Error loading data:', err);
-        setError(`데이터를 불러오는 중 오류가 발생했습니다: ${err.message || String(err)}`);
+        console.error('Error loading time entries:', err);
+        setError(`근무 기록을 불러오는 중 오류가 발생했습니다: ${err.message || String(err)}`);
         setIsLoading(false);
       }
     }
     
     // 환경 변수가 있을 때만 데이터 로드
     if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-      loadData();
+      loadTimeEntries();
     }
   }, [currentMonth]);
   
@@ -327,37 +293,17 @@ export default function Dashboard() {
               <p className="text-2xl font-bold">{formatWorkingHours(totalWorkingHours)}</p>
             </div>
             <div className="bg-green-50 p-4 rounded-lg">
-              <p className="text-gray-600">100시간 기준 남은 시간</p>
-              <p className="text-2xl font-bold">{formatWorkingHours(Math.max(0, 100 - totalWorkingHours))}</p>
+              <p className="text-gray-600">이번 달 근무 일수</p>
+              <p className="text-2xl font-bold">{timeEntries.filter(entry => entry.date.startsWith(format(currentMonth, 'yyyy-MM'))).length > 0 ? Array.from(new Set(timeEntries.filter(entry => entry.date.startsWith(format(currentMonth, 'yyyy-MM'))).map(entry => entry.date))).length : 0}일</p>
             </div>
             <div className="bg-purple-50 p-4 rounded-lg">
-              <p className="text-gray-600">오늘 계획 진행률</p>
-              
-              {todayPlannedHours > 0 ? (
-                <div>
-                  <p className="text-lg font-bold mb-1">
-                    {Math.min(100, Math.round((totalWorkingHours / todayPlannedHours) * 100))}%
-                  </p>
-                  <div className="w-full bg-gray-200 rounded-full h-2.5">
-                    <div 
-                      className="bg-blue-600 h-2.5 rounded-full" 
-                      style={{ width: `${Math.min(100, Math.round((totalWorkingHours / todayPlannedHours) * 100))}%` }}
-                    ></div>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-lg font-bold">오늘 계획이 없습니다</p>
-              )}
+              <p className="text-gray-600">남은 근무 시간</p>
+              <p className="text-2xl font-bold">
+                {totalWorkingHours < 100 
+                  ? formatWorkingHours(100 - totalWorkingHours)
+                  : '0시간 0분'}
+              </p>
             </div>
-          </div>
-          
-          <div className="mt-4">
-            <Link 
-              href="/schedule" 
-              className="inline-block bg-green-500 text-white px-4 py-2 rounded hover:bg-green-700"
-            >
-              근무 계획
-            </Link>
           </div>
         </div>
       )}
@@ -383,7 +329,7 @@ export default function Dashboard() {
             </button>
           </div>
         
-          <div className="grid grid-cols-7 gap-1 text-xs sm:text-sm">
+          <div className="grid grid-cols-7 gap-1">
             {/* 요일 헤더 */}
           {weekDays.map((day) => (
             <div key={day} className="text-center font-semibold p-2">
@@ -433,10 +379,6 @@ export default function Dashboard() {
             const hasRecord = totalHours > 0;
             const isSelected = selectedDate === dateStr;
             
-            // 해당 날짜의 계획된 근무 시간 찾기
-            const schedule = workSchedules.find(s => s.date === dateStr);
-            const plannedHours = schedule ? schedule.planned_hours : 0;
-            
             // 근무 시간에 따른 배경색 계산
             let bgColorClass = '';
             if (hasRecord) {
@@ -447,33 +389,22 @@ export default function Dashboard() {
               } else if (totalHours > 0) {
                 bgColorClass = 'bg-red-100';
               }
-            } else if (plannedHours > 0) {
-              // 계획은 있지만 실제 기록이 없는 경우 연한 색상으로 표시
-              bgColorClass = 'bg-blue-50';
             }
             
             return (
               <div 
                 key={dateStr} 
-                className={`p-1 min-h-[50px] md:min-h-[60px] border ${isSelected ? 'border-blue-500' : 'border-gray-200'} ${bgColorClass} cursor-pointer hover:bg-gray-50`}
+                className={`p-2 min-h-[60px] border ${isSelected ? 'border-blue-500' : 'border-gray-200'} ${bgColorClass} cursor-pointer hover:bg-gray-50`}
                 onClick={() => handleDateClick(dateStr)}
               >
                 <div className={`font-medium ${getDay(day) === 6 ? 'text-blue-600' : getDay(day) === 0 ? 'text-red-600' : ''}`}>
                   {format(day, 'd')}
                 </div>
-                {/* 근무 계획 및 실제 근무 정보를 간소화하여 표시 */}
-                <div className="flex flex-col mt-1">
-                  {totalHours > 0 && (
-                    <div className="text-xs text-gray-500">
-                      {totalHours.toFixed(1)}h
-                    </div>
-                  )}
-                  {schedule && (
-                    <div className="text-xs text-green-600">
-                      {schedule.planned_hours}h
-                    </div>
-                  )}
-                </div>
+                {hasRecord && (
+                  <div className="text-xs mt-1 text-gray-600">
+                    {formatWorkingHours(totalHours, true)}
+                  </div>
+                )}
               </div>
             );
           })}
