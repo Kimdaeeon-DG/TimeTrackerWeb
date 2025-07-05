@@ -306,14 +306,10 @@ export default function Dashboard() {
       {!isLoading && !error && (
         <div className="bg-white shadow rounded-lg p-6 mb-6">
           <h2 className="text-xl font-semibold mb-4">근무 시간 요약</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="bg-blue-50 p-4 rounded-lg">
               <p className="text-gray-600">총 근무 시간</p>
               <p className="text-2xl font-bold">{formatWorkingHours(totalWorkingHours)}</p>
-            </div>
-            <div className="bg-green-50 p-4 rounded-lg">
-              <p className="text-gray-600">이번 달 근무 일수</p>
-              <p className="text-2xl font-bold">{timeEntries.filter(entry => entry.date.startsWith(format(currentMonth, 'yyyy-MM'))).length > 0 ? Array.from(new Set(timeEntries.filter(entry => entry.date.startsWith(format(currentMonth, 'yyyy-MM'))).map(entry => entry.date))).length : 0}일</p>
             </div>
             <div className="bg-purple-50 p-4 rounded-lg">
               <p className="text-gray-600">남은 근무 시간</p>
@@ -322,6 +318,51 @@ export default function Dashboard() {
                   ? formatWorkingHours(80 - totalWorkingHours)
                   : '0시간 0분'}
               </p>
+            </div>
+          </div>
+          
+          {/* 근무 계획 대비 진행률 게이지바 */}
+          <div className="mt-4">
+            <div className="flex justify-between items-center mb-1">
+              <p className="text-gray-600">근무 계획 대비 진행률</p>
+              <p className="text-sm font-medium">
+                {(() => {
+                  // 이번 달 근무 계획 총 시간 계산
+                  const currentMonthStr = format(currentMonth, 'yyyy-MM');
+                  const currentMonthSchedules = workSchedules.filter(schedule => schedule.date.startsWith(currentMonthStr));
+                  
+                  let totalPlannedHours = 0;
+                  currentMonthSchedules.forEach(schedule => {
+                    totalPlannedHours += parseFloat(schedule.planned_hours.toString());
+                  });
+                  
+                  // 계획이 없으면 0%
+                  if (totalPlannedHours === 0) return '0%';
+                  
+                  // 진행률 계산 (최대 100%)
+                  const progressPercent = Math.min(Math.round((totalWorkingHours / totalPlannedHours) * 100), 100);
+                  return `${progressPercent}% (${formatWorkingHours(totalWorkingHours)} / ${formatWorkingHours(totalPlannedHours)})`;
+                })()}
+              </p>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2.5">
+              {(() => {
+                // 이번 달 근무 계획 총 시간 계산
+                const currentMonthStr = format(currentMonth, 'yyyy-MM');
+                const currentMonthSchedules = workSchedules.filter(schedule => schedule.date.startsWith(currentMonthStr));
+                
+                let totalPlannedHours = 0;
+                currentMonthSchedules.forEach(schedule => {
+                  totalPlannedHours += parseFloat(schedule.planned_hours.toString());
+                });
+                
+                // 계획이 없으면 0%
+                if (totalPlannedHours === 0) return <div className="w-0 h-2.5 rounded-full bg-blue-600"></div>;
+                
+                // 진행률 계산 (최대 100%)
+                const progressPercent = Math.min(Math.round((totalWorkingHours / totalPlannedHours) * 100), 100);
+                return <div className="h-2.5 rounded-full bg-blue-600" style={{ width: `${progressPercent}%` }}></div>;
+              })()}
             </div>
           </div>
         </div>
@@ -436,10 +477,10 @@ export default function Dashboard() {
                   </div>
                 )}
                 
-                {/* 근무 계획 표시 */}
+                {/* 근무 계획 표시 - 계획: 텍스트 없이 숫자만 */}
                 {hasSchedule && (
                   <div className="text-xs mt-1 text-green-600">
-                    계획: {formatWorkingHours(totalPlannedHours, true)}
+                    {formatWorkingHours(totalPlannedHours, true)}
                   </div>
                 )}
               </div>
