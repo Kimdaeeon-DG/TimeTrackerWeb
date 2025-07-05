@@ -324,7 +324,7 @@ export default function Dashboard() {
           {/* 오늘 기준 근무 계획 대비 진행률 게이지바 */}
           <div className="mt-4">
             <div className="flex justify-between items-center mb-1">
-              <p className="text-gray-600">오늘 계획 진행률 ({format(new Date(), 'yyyy-MM-dd')})</p>
+              <p className="text-gray-600">오늘 계획 진행률</p>
               <p className="text-sm font-medium">
                 {(() => {
                   // 오늘 날짜 구하기

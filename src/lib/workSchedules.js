@@ -1,5 +1,44 @@
 import { supabase } from './supabase';
 
+// 근무 계획 복사 함수
+export async function copyWorkSchedulesToDate(schedules, targetDate) {
+  // 현재 로그인한 사용자 정보 가져오기
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    console.error('사용자가 로그인되어 있지 않습니다.');
+    return { success: false, message: '로그인이 필요합니다.' };
+  }
+  
+  try {
+    const newSchedules = [];
+    
+    // 각 스케줄을 새 날짜에 복사
+    for (const schedule of schedules) {
+      const { data, error } = await supabase
+        .from('work_schedules')
+        .insert([
+          { 
+            date: targetDate,
+            start_time: schedule.start_time,
+            end_time: schedule.end_time,
+            planned_hours: schedule.planned_hours,
+            user_id: user.id
+          }
+        ])
+        .select();
+      
+      if (error) throw error;
+      newSchedules.push(data[0]);
+    }
+    
+    return { success: true, data: newSchedules };
+  } catch (error) {
+    console.error('Error copying work schedules:', error);
+    return { success: false, message: error.message || '근무 계획 복사 중 오류가 발생했습니다.' };
+  }
+}
+
 // 특정 월의 근무 계획 가져오기
 export async function getWorkSchedulesByMonth(year, month) {
   // 현재 로그인한 사용자 정보 가져오기

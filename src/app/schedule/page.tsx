@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import { getWorkSchedulesByMonth, getWorkSchedulesByDate, createWorkSchedule, updateWorkSchedule, deleteWorkSchedule } from '../../lib/workSchedules';
+import { getWorkSchedulesByMonth, getWorkSchedulesByDate, createWorkSchedule, updateWorkSchedule, deleteWorkSchedule, copyWorkSchedulesToDate } from '../../lib/workSchedules';
 import toast, { Toaster } from 'react-hot-toast';
 
 interface WorkSchedule {
@@ -28,6 +28,10 @@ export default function SchedulePage() {
   const [startTime, setStartTime] = useState<string>('');
   const [endTime, setEndTime] = useState<string>('');
   const [plannedHours, setPlannedHours] = useState<number>(0);
+  
+  // 근무 계획 복사 관련 상태
+  const [isCopyingSchedule, setIsCopyingSchedule] = useState<boolean>(false);
+  const [targetDate, setTargetDate] = useState<string>('');
 
   // 환경 변수 확인
   useEffect(() => {
@@ -152,6 +156,8 @@ export default function SchedulePage() {
     setStartTime('');
     setEndTime('');
     setPlannedHours(0);
+    setIsCopyingSchedule(false);
+    setTargetDate('');
   };
   
   // 계획 시간 자동 계산
@@ -293,6 +299,59 @@ export default function SchedulePage() {
     }
   };
   
+  // 근무 계획 복사 모드 시작
+  const startCopyingSchedule = () => {
+    if (selectedDateSchedules.length === 0) {
+      toast.error('복사할 근무 계획이 없습니다.');
+      return;
+    }
+    
+    setIsCopyingSchedule(true);
+    // 기본값으로 내일 날짜 설정
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    setTargetDate(format(tomorrow, 'yyyy-MM-dd'));
+  };
+  
+  // 근무 계획 복사 실행
+  const copySchedules = async () => {
+    if (!selectedDate || !targetDate) {
+      toast.error('모든 필드를 입력해주세요.');
+      return;
+    }
+    
+    if (selectedDate === targetDate) {
+      toast.error('동일한 날짜에는 복사할 수 없습니다.');
+      return;
+    }
+    
+    try {
+      setIsLoading(true);
+      
+      const result = await copyWorkSchedulesToDate(selectedDateSchedules, targetDate);
+      
+      if (result.success) {
+        toast.success(`근무 계획이 ${format(parseISO(targetDate), 'yyyy년 MM월 dd일')}에 복사되었습니다.`);
+        
+        // 데이터 다시 로드
+        const schedules = await getWorkSchedulesByMonth(
+          currentMonth.getFullYear(),
+          currentMonth.getMonth() + 1
+        );
+        setWorkSchedules(schedules || []);
+        
+        resetScheduleForm();
+      } else {
+        toast.error(result.message || '근무 계획 복사 중 오류가 발생했습니다.');
+      }
+    } catch (err: any) {
+      console.error('Error copying work schedules:', err);
+      toast.error(err.message || '근무 계획 복사 중 오류가 발생했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
   return (
     <div className="container mx-auto px-4 py-8">
       <Toaster position="top-right" />
@@ -418,13 +477,59 @@ export default function SchedulePage() {
             <h2 className="text-xl font-semibold">
               {format(parseISO(selectedDate), 'yyyy년 MM월 dd일')} 근무 계획
             </h2>
-            <button 
-              onClick={startAddingSchedule}
-              className="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600"
-            >
-              + 계획 추가
-            </button>
+            <div className="flex space-x-2">
+              <button 
+                onClick={startCopyingSchedule}
+                className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600"
+              >
+                계획 복사
+              </button>
+              <button 
+                onClick={startAddingSchedule}
+                className="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600"
+              >
+                + 계획 추가
+              </button>
+            </div>
           </div>
+          
+          {/* 근무 계획 복사 폼 */}
+          {isCopyingSchedule && (
+            <div className="bg-gray-50 p-4 rounded-lg mb-4">
+              <h3 className="font-medium mb-3">
+                근무 계획 복사
+              </h3>
+              <div className="grid grid-cols-1 gap-4 mb-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">대상 날짜</label>
+                  <input
+                    type="date"
+                    value={targetDate}
+                    onChange={(e) => setTargetDate(e.target.value)}
+                    className="w-full p-2 border rounded"
+                    min={format(new Date(), 'yyyy-MM-dd')}
+                  />
+                </div>
+                <div className="text-sm text-gray-600">
+                  <p>선택한 날짜({format(parseISO(selectedDate), 'yyyy년 MM월 dd일')})의 근무 계획 {selectedDateSchedules.length}개가 대상 날짜에 복사됩니다.</p>
+                </div>
+              </div>
+              <div className="flex justify-end space-x-2">
+                <button
+                  onClick={resetScheduleForm}
+                  className="px-3 py-1 border rounded hover:bg-gray-100"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={copySchedules}
+                  className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+                >
+                  복사
+                </button>
+              </div>
+            </div>
+          )}
           
           {/* 근무 계획 추가/수정 폼 */}
           {(isAddingSchedule || editingSchedule) && (
