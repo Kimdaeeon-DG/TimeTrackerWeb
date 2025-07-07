@@ -4,6 +4,7 @@ import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths,
 import { ko } from 'date-fns/locale';
 import { getWorkSchedulesByMonth, getWorkSchedulesByDate, createWorkSchedule, updateWorkSchedule, deleteWorkSchedule, copyWorkSchedulesToDate } from '../../lib/workSchedules';
 import toast, { Toaster } from 'react-hot-toast';
+import Link from 'next/link';
 
 interface WorkSchedule {
   id: string;
@@ -666,7 +667,13 @@ export default function SchedulePage() {
                       <td className="px-6 py-4 whitespace-nowrap text-green-600">
                         {formatWorkingHours(schedule.planned_hours)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium flex justify-end items-center">
+                        <Link 
+                          href="/timer" 
+                          className="bg-primary text-white px-3 py-1 rounded hover:bg-blue-700 mr-3"
+                        >
+                          출퇴근 기록
+                        </Link>
                         <button
                           onClick={() => startEditingSchedule(schedule)}
                           className="text-blue-600 hover:text-blue-900 mr-3"
