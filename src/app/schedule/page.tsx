@@ -1,10 +1,10 @@
 "use client";
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { getWorkSchedulesByMonth, getWorkSchedulesByDate, createWorkSchedule, updateWorkSchedule, deleteWorkSchedule, copyWorkSchedulesToDate } from '../../lib/workSchedules';
 import toast, { Toaster } from 'react-hot-toast';
-import Link from 'next/link';
 
 interface WorkSchedule {
   id: string;
@@ -417,6 +417,12 @@ export default function SchedulePage() {
       
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">근무 계획</h1>
+        <Link 
+          href="/timer" 
+          className="bg-primary text-white px-4 py-2 rounded hover:bg-blue-700"
+        >
+          출퇴근 기록
+        </Link>
       </div>
       
       {/* 로딩 상태 표시 */}
@@ -667,13 +673,7 @@ export default function SchedulePage() {
                       <td className="px-6 py-4 whitespace-nowrap text-green-600">
                         {formatWorkingHours(schedule.planned_hours)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium flex justify-end items-center">
-                        <Link 
-                          href="/timer" 
-                          className="bg-primary text-white px-3 py-1 rounded hover:bg-blue-700 mr-3"
-                        >
-                          출퇴근 기록
-                        </Link>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <button
                           onClick={() => startEditingSchedule(schedule)}
                           className="text-blue-600 hover:text-blue-900 mr-3"
