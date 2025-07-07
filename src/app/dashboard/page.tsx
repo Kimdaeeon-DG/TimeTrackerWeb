@@ -349,7 +349,14 @@ export default function Dashboard() {
                   let actualHoursToday = 0;
                   todayEntries.forEach(entry => {
                     if (entry.working_hours !== null) {
+                      // 완료된 근무 시간 추가
                       actualHoursToday += parseFloat(entry.working_hours.toString());
+                    } else if (entry.check_in && !entry.check_out) {
+                      // 현재 진행 중인 근무 시간 계산
+                      const checkInTime = new Date(entry.check_in);
+                      const now = new Date();
+                      const diffHours = (now.getTime() - checkInTime.getTime()) / (1000 * 60 * 60);
+                      actualHoursToday += diffHours;
                     }
                   });
                   
@@ -386,7 +393,14 @@ export default function Dashboard() {
                 let actualHoursToday = 0;
                 todayEntries.forEach(entry => {
                   if (entry.working_hours !== null) {
+                    // 완료된 근무 시간 추가
                     actualHoursToday += parseFloat(entry.working_hours.toString());
+                  } else if (entry.check_in && !entry.check_out) {
+                    // 현재 진행 중인 근무 시간 계산
+                    const checkInTime = new Date(entry.check_in);
+                    const now = new Date();
+                    const diffHours = (now.getTime() - checkInTime.getTime()) / (1000 * 60 * 60);
+                    actualHoursToday += diffHours;
                   }
                 });
                 
