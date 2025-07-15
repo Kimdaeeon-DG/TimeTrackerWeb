@@ -346,15 +346,15 @@ export default function Dashboard() {
           <h2 className="text-xl font-semibold mb-4">근무 시간 요약</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="bg-blue-50 p-4 rounded-lg">
-              <p className="text-gray-600">오늘 총 근무 시간</p>
-              <p className="text-2xl font-bold">{formatWorkingHours(actualHoursToday)}</p>
+              <p className="text-gray-600">이번 달 총 근무시간</p>
+              <p className="text-2xl font-bold">{formatWorkingHours(totalWorkingHours)}</p>
             </div>
             <div className="bg-purple-50 p-4 rounded-lg">
-              <p className="text-gray-600">오늘 남은 근무 시간</p>
+              <p className="text-gray-600">100시간 기준 남은 시간</p>
               <p className="text-2xl font-bold">
-                {plannedHoursToday > 0 
-                  ? formatWorkingHours(remainingHoursToday)
-                  : '계획된 근무 없음'}
+                {totalWorkingHours < 100 
+                  ? formatWorkingHours(100 - totalWorkingHours)
+                  : '0시간 0분'}
               </p>
             </div>
           </div>
