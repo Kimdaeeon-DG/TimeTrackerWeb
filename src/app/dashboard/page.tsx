@@ -87,6 +87,12 @@ export default function Dashboard() {
           currentMonthEntries.forEach((entry) => {
             if (entry.working_hours) {
               totalHours += entry.working_hours;
+            } else if (entry.check_in && !entry.check_out) {
+              // 진행 중인 근무 시간도 계산에 포함
+              const checkInTime = new Date(entry.check_in);
+              const currentTime = new Date(); // 현재 시간 사용
+              const diffHours = (currentTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60);
+              totalHours += diffHours;
             }
           });
         }
@@ -137,7 +143,7 @@ export default function Dashboard() {
     if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
       loadData();
     }
-  }, [currentMonth]);
+  }, [currentMonth]); // 페이지 방문 시마다 데이터를 새로 불러오고, 월 변경 시에도 다시 불러옴
   
   // 이전 달로 이동
   const prevMonth = () => {
@@ -350,7 +356,7 @@ export default function Dashboard() {
               <p className="text-2xl font-bold">{formatWorkingHours(totalWorkingHours)}</p>
             </div>
             <div className="bg-purple-50 p-4 rounded-lg">
-              <p className="text-gray-600">100시간 기준 남은 시간</p>
+              <p className="text-gray-600">남은 시간</p>
               <p className="text-2xl font-bold">
                 {totalWorkingHours < 100 
                   ? formatWorkingHours(100 - totalWorkingHours)
