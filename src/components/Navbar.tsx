@@ -42,12 +42,6 @@ export default function Navbar() {
                 >
                   근무 계획
                 </Link>
-                <button 
-                  onClick={signOut}
-                  className="px-3 py-2 rounded-md text-sm font-medium mx-1 hover:bg-blue-700"
-                >
-                  로그아웃
-                </button>
               </>
             ) : (
               <Link 
