@@ -32,6 +32,11 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   
+  // 오늘의 근무 시간 관련 상태 추가
+  const [actualHoursToday, setActualHoursToday] = useState<number>(0);
+  const [plannedHoursToday, setPlannedHoursToday] = useState<number>(0);
+  const [remainingHoursToday, setRemainingHoursToday] = useState<number>(0);
+  
   // 기록 수정을 위한 상태
   const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null);
   const [editDate, setEditDate] = useState<string>('');
@@ -86,6 +91,39 @@ export default function Dashboard() {
           });
         }
         setTotalWorkingHours(totalHours);
+        
+        // 오늘 날짜 구하기
+        const today = new Date();
+        const todayStr = format(today, 'yyyy-MM-dd');
+        
+        // 오늘의 계획된 근무 시간 계산
+        const todaySchedules = schedules ? schedules.filter(schedule => schedule.date === todayStr) : [];
+        let plannedHours = 0;
+        todaySchedules.forEach(schedule => {
+          plannedHours += parseFloat(schedule.planned_hours.toString());
+        });
+        setPlannedHoursToday(plannedHours);
+        
+        // 오늘의 실제 근무 시간 계산
+        const todayEntries = entries ? entries.filter(entry => entry.date === todayStr) : [];
+        let actualHours = 0;
+        todayEntries.forEach(entry => {
+          if (entry.working_hours !== null) {
+            // 완료된 근무 시간 추가
+            actualHours += parseFloat(entry.working_hours.toString());
+          } else if (entry.check_in && !entry.check_out) {
+            // 현재 진행 중인 근무 시간 계산
+            const checkInTime = new Date(entry.check_in);
+            const currentTime = new Date(); // 현재 시간 사용
+            const diffHours = (currentTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60);
+            actualHours += diffHours;
+          }
+        });
+        setActualHoursToday(actualHours);
+        
+        // 남은 근무 시간 계산 (계획 시간이 0이면 남은 시간도 0으로 설정)
+        const remainingHours = plannedHours > 0 ? Math.max(0, plannedHours - actualHours) : 0;
+        setRemainingHoursToday(remainingHours);
         
         setIsLoading(false);
       } catch (err: any) {
@@ -308,15 +346,15 @@ export default function Dashboard() {
           <h2 className="text-xl font-semibold mb-4">근무 시간 요약</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="bg-blue-50 p-4 rounded-lg">
-              <p className="text-gray-600">총 근무 시간</p>
-              <p className="text-2xl font-bold">{formatWorkingHours(totalWorkingHours)}</p>
+              <p className="text-gray-600">오늘 총 근무 시간</p>
+              <p className="text-2xl font-bold">{formatWorkingHours(actualHoursToday)}</p>
             </div>
             <div className="bg-purple-50 p-4 rounded-lg">
-              <p className="text-gray-600">남은 근무 시간</p>
+              <p className="text-gray-600">오늘 남은 근무 시간</p>
               <p className="text-2xl font-bold">
-                {totalWorkingHours < 100 
-                  ? formatWorkingHours(100 - totalWorkingHours)
-                  : '0시간 0분'}
+                {plannedHoursToday > 0 
+                  ? formatWorkingHours(remainingHoursToday)
+                  : '계획된 근무 없음'}
               </p>
             </div>
           </div>
@@ -326,91 +364,19 @@ export default function Dashboard() {
             <div className="flex justify-between items-center mb-1">
               <p className="text-gray-600">오늘 계획 진행률</p>
               <p className="text-sm font-medium">
-                {(() => {
-                  // 오늘 날짜 구하기
-                  const today = new Date();
-                  const todayStr = format(today, 'yyyy-MM-dd');
-                  
-                  // 오늘의 계획된 근무 시간 계산
-                  const todaySchedules = workSchedules.filter(schedule => {
-                    return schedule.date === todayStr;
-                  });
-                  
-                  let plannedHoursToday = 0;
-                  todaySchedules.forEach(schedule => {
-                    plannedHoursToday += parseFloat(schedule.planned_hours.toString());
-                  });
-                  
-                  // 오늘의 실제 근무 시간 계산
-                  const todayEntries = timeEntries.filter(entry => {
-                    return entry.date === todayStr;
-                  });
-                  
-                  let actualHoursToday = 0;
-                  todayEntries.forEach(entry => {
-                    if (entry.working_hours !== null) {
-                      // 완료된 근무 시간 추가
-                      actualHoursToday += parseFloat(entry.working_hours.toString());
-                    } else if (entry.check_in && !entry.check_out) {
-                      // 현재 진행 중인 근무 시간 계산
-                      const checkInTime = new Date(entry.check_in);
-                      const now = new Date();
-                      const diffHours = (now.getTime() - checkInTime.getTime()) / (1000 * 60 * 60);
-                      actualHoursToday += diffHours;
-                    }
-                  });
-                  
-                  // 계획이 없으면 0%
-                  if (plannedHoursToday === 0) return '0%';
-                  
-                  // 진행률 계산 (최대 100%)
-                  const progressPercent = Math.min(Math.round((actualHoursToday / plannedHoursToday) * 100), 100);
-                  return `${progressPercent}% (${formatWorkingHours(actualHoursToday)} / ${formatWorkingHours(plannedHoursToday)})`;
-                })()}
+                {plannedHoursToday === 0 ? '0%' : 
+                  `${Math.min(Math.round((actualHoursToday / plannedHoursToday) * 100), 100)}% (${formatWorkingHours(actualHoursToday)} / ${formatWorkingHours(plannedHoursToday)})`
+                }
               </p>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-2.5">
-              {(() => {
-                // 오늘 날짜 구하기
-                const today = new Date();
-                const todayStr = format(today, 'yyyy-MM-dd');
-                
-                // 오늘의 계획된 근무 시간 계산
-                const todaySchedules = workSchedules.filter(schedule => {
-                  return schedule.date === todayStr;
-                });
-                
-                let plannedHoursToday = 0;
-                todaySchedules.forEach(schedule => {
-                  plannedHoursToday += parseFloat(schedule.planned_hours.toString());
-                });
-                
-                // 오늘의 실제 근무 시간 계산
-                const todayEntries = timeEntries.filter(entry => {
-                  return entry.date === todayStr;
-                });
-                
-                let actualHoursToday = 0;
-                todayEntries.forEach(entry => {
-                  if (entry.working_hours !== null) {
-                    // 완료된 근무 시간 추가
-                    actualHoursToday += parseFloat(entry.working_hours.toString());
-                  } else if (entry.check_in && !entry.check_out) {
-                    // 현재 진행 중인 근무 시간 계산
-                    const checkInTime = new Date(entry.check_in);
-                    const now = new Date();
-                    const diffHours = (now.getTime() - checkInTime.getTime()) / (1000 * 60 * 60);
-                    actualHoursToday += diffHours;
-                  }
-                });
-                
-                // 계획이 없으면 0%
-                if (plannedHoursToday === 0) return <div className="w-0 h-2.5 rounded-full bg-blue-600"></div>;
-                
-                // 진행률 계산 (최대 100%)
-                const progressPercent = Math.min(Math.round((actualHoursToday / plannedHoursToday) * 100), 100);
-                return <div className="h-2.5 rounded-full bg-blue-600" style={{ width: `${progressPercent}%` }}></div>;
-              })()}
+              {plannedHoursToday === 0 ? 
+                <div className="w-0 h-2.5 rounded-full bg-blue-600"></div> :
+                <div 
+                  className="h-2.5 rounded-full bg-blue-600" 
+                  style={{ width: `${Math.min(Math.round((actualHoursToday / plannedHoursToday) * 100), 100)}%` }}
+                ></div>
+              }
             </div>
           </div>
         </div>
