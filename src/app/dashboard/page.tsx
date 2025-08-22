@@ -26,8 +26,9 @@ export default function Dashboard() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
   const [workSchedules, setWorkSchedules] = useState<WorkSchedule[]>([]);
-  const [totalWorkingHours, setTotalWorkingHours] = useState<number>(0);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [adjustedTotalPlannedHours, setAdjustedTotalPlannedHours] = useState<number>(0);
+  const [totalWorkingHours, setTotalWorkingHours] = useState<number>(0);
   const [selectedDateEntries, setSelectedDateEntries] = useState<TimeEntry[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -77,9 +78,71 @@ export default function Dashboard() {
         console.log('Loaded work schedules:', schedules);
         setWorkSchedules(schedules || []);
         
+        // 과거 날짜 조정을 반영한 총 계획 시간 계산
+        let adjustedPlannedHours = 0;
+        const monthStr = format(currentMonth, 'yyyy-MM');
+        const currentMonthDays = eachDayOfInterval({ 
+          start: startOfMonth(currentMonth), 
+          end: endOfMonth(currentMonth) 
+        });
+        
+        currentMonthDays.forEach(day => {
+          const dateStr = format(day, 'yyyy-MM-dd');
+          const dayStart = startOfDay(day);
+          const dayEnd = endOfDay(day);
+          
+          // 해당 날짜의 실제 근무 시간 계산
+          let totalActualHours = 0;
+          if (entries) {
+            entries.forEach(entry => {
+              if (!entry.check_in || !entry.check_out) return;
+              
+              const checkIn = parseISO(entry.check_in);
+              const checkOut = parseISO(entry.check_out);
+              
+              if (
+                (checkIn <= dayEnd && checkOut >= dayStart) || 
+                (checkIn <= dayEnd && checkOut < dayStart && !isSameDay(checkIn, checkOut))
+              ) {
+                const periodStart = checkIn > dayStart ? checkIn : dayStart;
+                const periodEnd = checkOut < dayEnd ? checkOut : dayEnd;
+                
+                if (isAfter(periodEnd, periodStart)) {
+                  const hoursWorked = differenceInHours(periodEnd, periodStart) + 
+                                      (differenceInMinutes(periodEnd, periodStart) % 60) / 60;
+                  totalActualHours += hoursWorked;
+                }
+              }
+            });
+          }
+          
+          // 해당 날짜의 원래 계획 시간
+          const schedulesForDate = schedules ? schedules.filter(schedule => schedule.date === dateStr) : [];
+          let originalPlannedHours = 0;
+          schedulesForDate.forEach(schedule => {
+            originalPlannedHours += parseFloat(schedule.planned_hours.toString());
+          });
+          
+          // 과거 날짜 조정 적용
+          if (isPastDate(dateStr)) {
+            if (schedulesForDate.length > 0) {
+              // 기존 계획이 있었던 경우: 실제 근무 시간으로 대체
+              adjustedPlannedHours += totalActualHours;
+            } else if (totalActualHours > 0) {
+              // 계획은 없었지만 실제 근무한 경우: 실제 근무 시간 추가
+              adjustedPlannedHours += totalActualHours;
+            }
+          } else {
+            // 현재/미래 날짜는 원래 계획 시간 사용
+            adjustedPlannedHours += originalPlannedHours;
+          }
+        });
+        
+        // 조정된 총 계획 시간을 상태에 저장
+        setAdjustedTotalPlannedHours(adjustedPlannedHours);
+        
         // 현재 월에 해당하는 기록만 필터링
-        const currentMonthStr = format(currentMonth, 'yyyy-MM');
-        const currentMonthEntries = entries ? entries.filter(entry => entry.date.startsWith(currentMonthStr)) : [];
+        const currentMonthEntries = entries ? entries.filter(entry => entry.date.startsWith(monthStr)) : [];
         
         // 현재 월의 총 근무 시간 계산
         let totalHours = 0;
@@ -191,6 +254,15 @@ export default function Dashboard() {
       // 기존 형식 (예: 3시간 30분)
       return `${h}시간 ${m}분`;
     }
+  }
+  
+  // 날짜가 과거인지 확인하는 함수
+  function isPastDate(dateStr: string): boolean {
+    const today = new Date();
+    const targetDate = new Date(dateStr);
+    today.setHours(0, 0, 0, 0);
+    targetDate.setHours(0, 0, 0, 0);
+    return targetDate < today;
   }
   
   // 기록 수정 시작
@@ -350,17 +422,21 @@ export default function Dashboard() {
       {!isLoading && !error && (
         <div className="bg-white shadow rounded-lg p-6 mb-6">
           <h2 className="text-xl font-semibold mb-4">근무 시간 요약</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-blue-50 p-4 rounded-lg">
               <p className="text-gray-600">이번 달 총 근무시간</p>
               <p className="text-2xl font-bold">{formatWorkingHours(totalWorkingHours)}</p>
             </div>
+            <div className="bg-green-50 p-4 rounded-lg">
+              <p className="text-gray-600">이번 달 총 계획시간</p>
+              <p className="text-2xl font-bold">{formatWorkingHours(adjustedTotalPlannedHours)}</p>
+            </div>
             <div className="bg-purple-50 p-4 rounded-lg">
-              <p className="text-gray-600">남은 시간</p>
+              <p className="text-gray-600">100시간 기준 남은 시간</p>
               <p className="text-2xl font-bold">
-                {totalWorkingHours < 100 
-                  ? formatWorkingHours(100 - totalWorkingHours)
-                  : '0시간 0분'}
+                {totalWorkingHours >= 100 
+                  ? '0시간 0분'
+                  : formatWorkingHours(100 - totalWorkingHours)}
               </p>
             </div>
           </div>
@@ -465,8 +541,21 @@ export default function Dashboard() {
               totalPlannedHours += parseFloat(schedule.planned_hours.toString());
             });
             
+            // 지나간 날에 대해서는 실제 근무 시간을 계획 시간으로 반영
+            // 1. 근무 계획이 있었던 경우: 계획 시간을 실제 근무 시간으로 대체
+            // 2. 근무 계획이 없었지만 실제 근무한 경우: 실제 근무 시간을 계획 시간으로 추가
+            if (isPastDate(dateStr)) {
+              if (schedulesForDate.length > 0) {
+                // 기존 계획이 있었던 경우
+                totalPlannedHours = totalHours;
+              } else if (totalHours > 0) {
+                // 계획은 없었지만 실제 근무한 경우
+                totalPlannedHours = totalHours;
+              }
+            }
+            
             const hasRecord = totalHours > 0;
-            const hasSchedule = schedulesForDate.length > 0;
+            const hasSchedule = schedulesForDate.length > 0 || (isPastDate(dateStr) && totalHours > 0);
             const isSelected = selectedDate === dateStr;
             
             // 근무 시간에 따른 배경색 계산
@@ -511,129 +600,163 @@ export default function Dashboard() {
       )}
       
       {/* 선택한 날짜의 출퇴근 기록 */}
-      {selectedDateEntries.length > 0 ? (
+      {selectedDate && (
         <div className="bg-white shadow rounded-lg p-6 mb-6">
           <h2 className="text-xl font-semibold mb-4">
-            {selectedDate ? format(parseISO(selectedDate), 'yyyy년 MM월 dd일') : format(new Date(), 'yyyy년 MM월 dd일')} 출퇴근 기록
+            {format(parseISO(selectedDate), 'yyyy년 MM월 dd일')} 근무 기록
           </h2>
-          <div className="overflow-hidden">
-            <div className="divide-y divide-gray-200">
-              {selectedDateEntries.map((entry) => (
-                <div key={entry.id} className="relative">
-                  {editingEntry?.id === entry.id ? (
-                    // 수정 모드
-                    <div className="p-4 bg-blue-50">
-                      <div className="mb-4">
-                        <label className="block text-xs font-medium text-gray-500 mb-1">날짜</label>
-                        <input 
-                          type="date" 
-                          value={editDate} 
-                          onChange={(e) => setEditDate(e.target.value)}
-                          className="border rounded px-2 py-1 w-full"
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-4 mb-4">
-                        <div>
-                          <label className="block text-xs font-medium text-gray-500 mb-1">출근 시간</label>
-                          <input 
-                            type="time" 
-                            value={editCheckInTime} 
-                            onChange={(e) => setEditCheckInTime(e.target.value)}
-                            className="border rounded px-2 py-1 w-full"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-500 mb-1">퇴근 시간</label>
-                          <input 
-                            type="time" 
-                            value={editCheckOutTime} 
-                            onChange={(e) => setEditCheckOutTime(e.target.value)}
-                            className="border rounded px-2 py-1 w-full"
-                          />
-                        </div>
-                      </div>
-                      <div className="flex justify-end space-x-2">
-                        <button 
-                          onClick={saveEditedEntry}
-                          className="bg-green-500 text-white px-4 py-1 rounded text-sm"
-                        >
-                          저장
-                        </button>
-                        <button 
-                          onClick={cancelEditing}
-                          className="bg-gray-500 text-white px-4 py-1 rounded text-sm"
-                        >
-                          취소
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    // 읽기 모드 - 스와이프 기능 추가
-                    <div className="group overflow-hidden touch-pan-x">
-                      {/* 삭제 버튼 (스와이프로만 노출) */}
-                      <div className="absolute right-0 top-0 bottom-0 bg-red-500 text-white flex items-center justify-center w-16 transform translate-x-full group-[.swiped]:translate-x-0 transition-transform duration-200">
-                        <button 
-                          onClick={() => deleteEntryHandler(entry.id)}
-                          className="w-full h-full flex items-center justify-center"
-                        >
-                          삭제
-                        </button>
-                      </div>
+          
+          {/* 선택한 날짜의 총 근무 시간 요약 */}
+          <div className="bg-blue-50 p-4 rounded-lg mb-4">
+            <div className="flex justify-between items-center">
+              <span className="text-gray-600">총 근무 시간:</span>
+              <span className="text-xl font-bold text-blue-600">
+                {(() => {
+                  const dateStr = selectedDate;
+                  const dayStart = startOfDay(parseISO(dateStr));
+                  const dayEnd = endOfDay(parseISO(dateStr));
+                  
+                  let totalHours = 0;
+                  timeEntries.forEach(entry => {
+                    if (!entry.check_in || !entry.check_out) return;
+                    
+                    const checkIn = parseISO(entry.check_in);
+                    const checkOut = parseISO(entry.check_out);
+                    
+                    if (
+                      (checkIn <= dayEnd && checkOut >= dayStart) || 
+                      (checkIn <= dayEnd && checkOut < dayStart && !isSameDay(checkIn, checkOut))
+                    ) {
+                      const periodStart = checkIn > dayStart ? checkIn : dayStart;
+                      const periodEnd = checkOut < dayEnd ? checkOut : dayEnd;
                       
-                      {/* 기록 내용 (클릭하면 수정 모드로 전환) */}
-                      <div 
-                        className="p-4 bg-white flex justify-between items-center transform group-[.swiped]:-translate-x-16 transition-transform duration-200 cursor-pointer"
-                        onClick={() => startEditing(entry)}
-                        onTouchStart={(e) => {
-                          // 터치 시작 위치 저장
-                          e.currentTarget.dataset.touchStartX = e.touches[0].clientX.toString();
-                        }}
-                        onTouchMove={(e) => {
-                          const touchStartX = parseInt(e.currentTarget.dataset.touchStartX || '0');
-                          const currentX = e.touches[0].clientX;
-                          const diff = touchStartX - currentX;
-                          
-                          // 왼쪽으로 스와이프하는 경우 (diff > 0)
-                          if (diff > 50) { // 50px 이상 스와이프 시 활성화
-                            e.currentTarget.parentElement?.classList.add('swiped');
-                          } else if (diff < -50) { // 오른쪽으로 스와이프하면 원래대로
-                            e.currentTarget.parentElement?.classList.remove('swiped');
-                          }
-                        }}
-                        onTouchEnd={() => {}}
-                      >
-                        <div className="flex items-center space-x-2">
-                          <div className="bg-blue-100 text-blue-800 rounded-full w-8 h-8 flex items-center justify-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                          </div>
-                          <div>
-                            <div className="font-medium text-sm">
-                              {entry.check_in ? format(parseISO(entry.check_in), 'HH:mm') : '-'} ~ {entry.check_out ? format(parseISO(entry.check_out), 'HH:mm') : '진행중'}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="text-sm text-gray-600">
-                          {entry.working_hours ? formatWorkingHours(entry.working_hours, true) : '-'}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
+                      if (isAfter(periodEnd, periodStart)) {
+                        const hoursWorked = differenceInHours(periodEnd, periodStart) + 
+                                            (differenceInMinutes(periodEnd, periodStart) % 60) / 60;
+                        totalHours += hoursWorked;
+                      }
+                    }
+                  });
+                  
+                  return formatWorkingHours(totalHours);
+                })()}
+              </span>
             </div>
           </div>
-        </div>
-      ) : (
-        selectedDate && (
-          <div className="bg-white shadow rounded-lg p-6 mb-6">
-            <h2 className="text-xl font-semibold mb-4">
-              {selectedDate ? format(parseISO(selectedDate), 'yyyy년 MM월 dd일') : format(new Date(), 'yyyy년 MM월 dd일')} 출퇴근 기록
-            </h2>
+          
+          {selectedDateEntries.length > 0 ? (
+            <div className="overflow-hidden">
+              <div className="divide-y divide-gray-200">
+                {selectedDateEntries.map((entry) => (
+                  <div key={entry.id} className="relative">
+                    {editingEntry?.id === entry.id ? (
+                      // 수정 모드
+                      <div className="p-4 bg-blue-50">
+                        <div className="mb-4">
+                          <label className="block text-xs font-medium text-gray-500 mb-1">날짜</label>
+                          <input 
+                            type="date" 
+                            value={editDate} 
+                            onChange={(e) => setEditDate(e.target.value)}
+                            className="border rounded px-2 py-1 w-full"
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 mb-4">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">출근 시간</label>
+                            <input 
+                              type="time" 
+                              value={editCheckInTime} 
+                              onChange={(e) => setEditCheckInTime(e.target.value)}
+                              className="border rounded px-2 py-1 w-full"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">퇴근 시간</label>
+                            <input 
+                              type="time" 
+                              value={editCheckOutTime} 
+                              onChange={(e) => setEditCheckOutTime(e.target.value)}
+                              className="border rounded px-2 py-1 w-full"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex justify-end space-x-2">
+                          <button 
+                            onClick={saveEditedEntry}
+                            className="bg-green-500 text-white px-4 py-1 rounded text-sm"
+                          >
+                            저장
+                          </button>
+                          <button 
+                            onClick={cancelEditing}
+                            className="bg-gray-500 text-white px-4 py-1 rounded text-sm"
+                          >
+                            취소
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      // 읽기 모드 - 스와이프 기능 추가
+                      <div className="group overflow-hidden touch-pan-x">
+                        {/* 삭제 버튼 (스와이프로만 노출) */}
+                        <div className="absolute right-0 top-0 bottom-0 bg-red-500 text-white flex items-center justify-center w-16 transform translate-x-full group-[.swiped]:translate-x-0 transition-transform duration-200">
+                          <button 
+                            onClick={() => deleteEntryHandler(entry.id)}
+                            className="w-full h-full flex items-center justify-center"
+                          >
+                            삭제
+                          </button>
+                        </div>
+                        
+                        {/* 기록 내용 (클릭하면 수정 모드로 전환) */}
+                        <div 
+                          className="p-4 bg-white flex justify-between items-center transform group-[.swiped]:-translate-x-16 transition-transform duration-200 cursor-pointer"
+                          onClick={() => startEditing(entry)}
+                          onTouchStart={(e) => {
+                            // 터치 시작 위치 저장
+                            e.currentTarget.dataset.touchStartX = e.touches[0].clientX.toString();
+                          }}
+                          onTouchMove={(e) => {
+                            const touchStartX = parseInt(e.currentTarget.dataset.touchStartX || '0');
+                            const currentX = e.touches[0].clientX;
+                            const diff = touchStartX - currentX;
+                            
+                            // 왼쪽으로 스와이프하는 경우 (diff > 0)
+                            if (diff > 50) { // 50px 이상 스와이프 시 활성화
+                              e.currentTarget.parentElement?.classList.add('swiped');
+                            } else if (diff < -50) { // 오른쪽으로 스와이프하면 원래대로
+                              e.currentTarget.parentElement?.classList.remove('swiped');
+                            }
+                          }}
+                          onTouchEnd={() => {}}
+                        >
+                          <div className="flex items-center space-x-2">
+                            <div className="bg-blue-100 text-blue-800 rounded-full w-8 h-8 flex items-center justify-center">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            </div>
+                            <div>
+                              <div className="font-medium text-sm">
+                                {entry.check_in ? format(parseISO(entry.check_in), 'HH:mm') : '-'} ~ {entry.check_out ? format(parseISO(entry.check_out), 'HH:mm') : '진행중'}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            {entry.working_hours ? formatWorkingHours(entry.working_hours, true) : '-'}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
             <p className="text-gray-500 text-center py-4">선택한 날짜의 출퇴근 기록이 없습니다.</p>
-          </div>
-        )
+          )}
+        </div>
       )}
     </div>
   );

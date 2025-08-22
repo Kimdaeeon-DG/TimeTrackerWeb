@@ -1,9 +1,10 @@
 "use client";
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, parseISO } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths, subMonths, parseISO, startOfDay, endOfDay, differenceInHours, differenceInMinutes, isAfter, isSameDay } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { getWorkSchedulesByMonth, getWorkSchedulesByDate, createWorkSchedule, updateWorkSchedule, deleteWorkSchedule, copyWorkSchedulesToDate } from '../../lib/workSchedules';
+import { getAllTimeEntries } from '../../lib/timeEntries';
 import toast, { Toaster } from 'react-hot-toast';
 
 interface WorkSchedule {
@@ -14,9 +15,18 @@ interface WorkSchedule {
   planned_hours: number;
 }
 
+interface TimeEntry {
+  id: string;
+  date: string;
+  check_in: string;
+  check_out: string | null;
+  working_hours: number | null;
+}
+
 export default function SchedulePage() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [workSchedules, setWorkSchedules] = useState<WorkSchedule[]>([]);
+  const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedDateSchedules, setSelectedDateSchedules] = useState<WorkSchedule[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -49,38 +59,98 @@ export default function SchedulePage() {
     }
   }, []);
 
-  // Supabase에서 근무 계획 불러오기
+  // Supabase에서 근무 계획과 시간 기록 불러오기
   useEffect(() => {
-    async function loadWorkSchedules() {
+    async function loadData() {
       try {
         setIsLoading(true);
         setError(null);
         
+        // 근무 계획 불러오기
         const schedules = await getWorkSchedulesByMonth(
           currentMonth.getFullYear(),
           currentMonth.getMonth() + 1
         );
         
-        setWorkSchedules(schedules || []);
+        // 시간 기록 불러오기
+        const entries = await getAllTimeEntries();
         
-        // 총 계획 근무 시간 계산
-        let totalHours = 0;
-        schedules.forEach((schedule) => {
-          totalHours += parseFloat(schedule.planned_hours.toString());
+        setWorkSchedules(schedules || []);
+        setTimeEntries(entries || []);
+        
+        // 과거 날짜 조정을 반영한 총 계획 시간 계산
+        let adjustedPlannedHours = 0;
+        const monthStr = format(currentMonth, 'yyyy-MM');
+        const currentMonthDays = eachDayOfInterval({ 
+          start: startOfMonth(currentMonth), 
+          end: endOfMonth(currentMonth) 
         });
-        setTotalPlannedHours(totalHours);
+        
+        currentMonthDays.forEach(day => {
+          const dateStr = format(day, 'yyyy-MM-dd');
+          const dayStart = startOfDay(day);
+          const dayEnd = endOfDay(day);
+          
+          // 해당 날짜의 실제 근무 시간 계산
+          let totalActualHours = 0;
+          if (entries) {
+            entries.forEach(entry => {
+              if (!entry.check_in || !entry.check_out) return;
+              
+              const checkIn = parseISO(entry.check_in);
+              const checkOut = parseISO(entry.check_out);
+              
+              if (
+                (checkIn <= dayEnd && checkOut >= dayStart) || 
+                (checkIn <= dayEnd && checkOut < dayStart && !isSameDay(checkIn, checkOut))
+              ) {
+                const periodStart = checkIn > dayStart ? checkIn : dayStart;
+                const periodEnd = checkOut < dayEnd ? checkOut : dayEnd;
+                
+                if (isAfter(periodEnd, periodStart)) {
+                  const hoursWorked = differenceInHours(periodEnd, periodStart) + 
+                                      (differenceInMinutes(periodEnd, periodStart) % 60) / 60;
+                  totalActualHours += hoursWorked;
+                }
+              }
+            });
+          }
+          
+          // 해당 날짜의 원래 계획 시간
+          const schedulesForDate = schedules ? schedules.filter(schedule => schedule.date === dateStr) : [];
+          let originalPlannedHours = 0;
+          schedulesForDate.forEach(schedule => {
+            originalPlannedHours += parseFloat(schedule.planned_hours.toString());
+          });
+          
+          // 과거 날짜 조정 적용
+          if (isPastDate(dateStr)) {
+            if (schedulesForDate.length > 0) {
+              // 기존 계획이 있었던 경우: 실제 근무 시간으로 대체
+              adjustedPlannedHours += totalActualHours;
+            } else if (totalActualHours > 0) {
+              // 계획은 없었지만 실제 근무한 경우: 실제 근무 시간 추가
+              adjustedPlannedHours += totalActualHours;
+            }
+          } else {
+            // 현재/미래 날짜는 원래 계획 시간 사용
+            adjustedPlannedHours += originalPlannedHours;
+          }
+        });
+        
+        setTotalPlannedHours(adjustedPlannedHours);
         
         setIsLoading(false);
       } catch (err: any) {
-        console.error('Error loading work schedules:', err);
-        setError(`근무 계획을 불러오는 중 오류가 발생했습니다: ${err.message || String(err)}`);
+        console.error('Error loading data:', err);
+        setError(`데이터를 불러오는 중 오류가 발생했습니다: ${err.message || String(err)}`);
         setIsLoading(false);
       }
     }
     
     // 환경 변수가 있을 때만 데이터 로드
     if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-      loadWorkSchedules();
+      loadData();
     }
   }, [currentMonth]);
   
@@ -206,6 +276,15 @@ export default function SchedulePage() {
       // 기존 형식 (예: 3시간 30분)
       return `${h}시간 ${m}분`;
     }
+  }
+  
+  // 날짜가 과거인지 확인하는 함수
+  function isPastDate(dateStr: string): boolean {
+    const today = new Date();
+    const targetDate = new Date(dateStr);
+    today.setHours(0, 0, 0, 0);
+    targetDate.setHours(0, 0, 0, 0);
+    return targetDate < today;
   }
   
   // 근무 계획 추가 모드 시작
@@ -494,6 +573,32 @@ export default function SchedulePage() {
             {/* 날짜 */}
             {monthDays.map((day) => {
               const dateStr = format(day, 'yyyy-MM-dd');
+              const dayStart = startOfDay(day);
+              const dayEnd = endOfDay(day);
+              
+              // 해당 날짜에 속한 실제 근무 시간 계산
+              let totalActualHours = 0;
+              timeEntries.forEach(entry => {
+                if (!entry.check_in || !entry.check_out) return;
+                
+                const checkIn = parseISO(entry.check_in);
+                const checkOut = parseISO(entry.check_out);
+                
+                // 해당 날짜에 속하는 시간 계산
+                if (
+                  (checkIn <= dayEnd && checkOut >= dayStart) || 
+                  (checkIn <= dayEnd && checkOut < dayStart && !isSameDay(checkIn, checkOut))
+                ) {
+                  const periodStart = checkIn > dayStart ? checkIn : dayStart;
+                  const periodEnd = checkOut < dayEnd ? checkOut : dayEnd;
+                  
+                  if (isAfter(periodEnd, periodStart)) {
+                    const hoursWorked = differenceInHours(periodEnd, periodStart) + 
+                                        (differenceInMinutes(periodEnd, periodStart) % 60) / 60;
+                    totalActualHours += hoursWorked;
+                  }
+                }
+              });
               
               // 해당 날짜의 근무 계획 찾기
               const schedulesForDate = workSchedules.filter(schedule => schedule.date === dateStr);
@@ -504,7 +609,20 @@ export default function SchedulePage() {
                 totalPlannedHoursForDate += parseFloat(schedule.planned_hours.toString());
               });
               
-              const hasSchedule = schedulesForDate.length > 0;
+              // 지나간 날에 대해서는 실제 근무 시간을 계획 시간으로 반영
+              // 1. 근무 계획이 있었던 경우: 계획 시간을 실제 근무 시간으로 대체
+              // 2. 근무 계획이 없었지만 실제 근무한 경우: 실제 근무 시간을 계획 시간으로 추가
+              if (isPastDate(dateStr)) {
+                if (schedulesForDate.length > 0) {
+                  // 기존 계획이 있었던 경우
+                  totalPlannedHoursForDate = totalActualHours;
+                } else if (totalActualHours > 0) {
+                  // 계획은 없었지만 실제 근무한 경우
+                  totalPlannedHoursForDate = totalActualHours;
+                }
+              }
+              
+              const hasSchedule = schedulesForDate.length > 0 || (isPastDate(dateStr) && totalActualHours > 0);
               const isSelected = selectedDate === dateStr;
               
               return (
